@@ -1,0 +1,92 @@
+#include "ODFTree.h"
+
+#suite odf
+
+#test pathCompareT
+    Path Objects;
+    mkPath( &Objects, 1, 0, "Objects" );
+    Path MyObject;  // Objects/MyObject
+    mkPath( &MyObject, 2, &Objects, "MyObject" );
+    Path MyItem;  // Objects/MyObject/MyItem
+    mkPath( &MyItem, 3, &MyObject, "MyItem" );
+    Path MyItem2;  // Objects/MyObject/MyItem2
+    mkPath( &MyItem2, 3, &MyObject, "MyItem2" );
+
+    Path MyObject2;  // Objects/MyObjecu
+    mkPath( &MyObject2, 2, &Objects, "MyObjecu" );
+    Path MyItem3; // Objects/MyObjecu/MyItem
+    mkPath( &MyItem3, 3, &MyObject2, "MyItem3" );
+
+
+    // Equals
+    ck_assert_int_eq(pathCompare(&Objects, &Objects), 0); 
+    ck_assert_int_eq(pathCompare(&MyObject, &MyObject), 0); 
+    ck_assert_int_eq(pathCompare(&MyItem, &MyItem), 0); 
+    ck_assert_int_eq(pathCompare(&MyItem2, &MyItem2), 0); 
+    ck_assert_int_eq(pathCompare(&MyObject2, &MyObject2), 0); 
+    ck_assert_int_eq(pathCompare(&MyItem3, &MyItem3), 0); 
+
+
+    // Lesser than
+    ck_assert_int_lt(pathCompare(&Objects, &MyObject), 0); 
+    ck_assert_int_lt(pathCompare(&Objects, &MyItem), 0); 
+    ck_assert_int_lt(pathCompare(&Objects, &MyItem2), 0); 
+    ck_assert_int_lt(pathCompare(&Objects, &MyObject2), 0); 
+    ck_assert_int_lt(pathCompare(&Objects, &MyItem3), 0); 
+
+    ck_assert_int_lt(pathCompare(&MyObject, &MyItem), 0); 
+    ck_assert_int_lt(pathCompare(&MyObject, &MyItem2), 0); 
+    ck_assert_int_lt(pathCompare(&MyObject, &MyObject2), 0); 
+    ck_assert_int_lt(pathCompare(&MyObject, &MyItem3), 0); 
+
+    ck_assert_int_lt(pathCompare(&MyItem, &MyItem2), 0); 
+    ck_assert_int_lt(pathCompare(&MyItem, &MyObject2), 0); 
+    ck_assert_int_lt(pathCompare(&MyItem, &MyItem3), 0); 
+
+    ck_assert_int_lt(pathCompare(&MyItem2, &MyObject2), 0); 
+    ck_assert_int_lt(pathCompare(&MyItem2, &MyItem3), 0); 
+
+    ck_assert_int_lt(pathCompare(&MyObject2, &MyItem3), 0); 
+
+
+    // Greater than
+    ck_assert_int_gt(pathCompare(&MyItem3, &Objects  ), 0); 
+    ck_assert_int_gt(pathCompare(&MyItem3, &MyObject ), 0); 
+    ck_assert_int_gt(pathCompare(&MyItem3, &MyItem   ), 0); 
+    ck_assert_int_gt(pathCompare(&MyItem3, &MyItem2  ), 0); 
+    ck_assert_int_gt(pathCompare(&MyItem3, &MyObject2), 0); 
+    
+    ck_assert_int_gt(pathCompare(&MyObject2, &Objects  ), 0); 
+    ck_assert_int_gt(pathCompare(&MyObject2, &MyObject ), 0); 
+    ck_assert_int_gt(pathCompare(&MyObject2, &MyItem   ), 0); 
+    ck_assert_int_gt(pathCompare(&MyObject2, &MyItem2  ), 0); 
+
+    ck_assert_int_gt(pathCompare(&MyItem2, &Objects  ), 0); 
+    ck_assert_int_gt(pathCompare(&MyItem2, &MyObject ), 0); 
+    ck_assert_int_gt(pathCompare(&MyItem2, &MyItem   ), 0); 
+
+    ck_assert_int_gt(pathCompare(&MyItem, &Objects  ), 0); 
+    ck_assert_int_gt(pathCompare(&MyItem, &MyObject ), 0); 
+
+    ck_assert_int_gt(pathCompare(&MyObject, &Objects  ), 0); 
+
+
+
+//#test addPathT
+//    ODFTree odf = {0};
+//
+//    ck_assert_int_eq(odf.size, 0);
+//    
+//    //char * path = "Objects/MyObject/MyInfoItem"
+//    addPath(&odf, &"Objects/MyObject/MyInfoItem");
+//
+//    ck_assert_int_eq(odf.size, 3);
+//
+//    // Size
+//    ck_assert_uint_eq(odf.sortedPaths[0].size, 1);
+//    ck_assert_uint_eq(odf.sortedPaths[1].size, 2);
+//    ck_assert_uint_eq(odf.sortedPaths[2].size, 3);
+//
+//    // Parent
+//    //ck_assert
+//    

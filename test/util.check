@@ -1,0 +1,51 @@
+#include "utils.h"
+#include <stdbool.h>
+
+schar intCompare(const int *a, const int *b) { return (*a < *b)? -1 : ((*a > *b)? 1 : 0); }
+
+#suite utils
+
+#test stringLenT
+    ck_assert_int_eq(stringLen("test"), 4);
+    ck_assert_int_eq(stringLen(""), 0);
+
+#test hashCodeT
+    ck_assert_uint_eq(calcHashCode(""), 0);
+    ck_assert_uint_eq(calcHashCode("a"), 97);
+    ck_assert_uint_eq(calcHashCode("ab"), 3105);
+    ck_assert_uint_eq(calcHashCode("test"), 3556498);
+    ck_assert_uint_eq(calcHashCode("tset"), 3569518);
+    ck_assert_uint_eq(calcHashCode("MyInfoItem"), 2631937741);
+
+#test binarySearchT
+#define assertBinarySearchInt(arr, search, expectedRes, expectedRet) \
+    needle = search; \
+    returnCode = binarySearch(arr, &needle, sizeof(arr)/sizeof(*arr), sizeof(*arr), (compareFunc) intCompare, &result); \
+    ck_assert_int_eq(returnCode, expectedRet); \
+    ck_assert_int_eq(result, expectedRes) \
+
+    int needle, returnCode, result;
+
+    int arr1[] = {1, 3};
+    assertBinarySearchInt(arr1, 0, 0, false);
+    assertBinarySearchInt(arr1, 4, 2, false);
+    assertBinarySearchInt(arr1, 1, 0, true);
+    assertBinarySearchInt(arr1, 3, 1, true);
+    assertBinarySearchInt(arr1, 2, 1, false);
+
+    int arr2[] = {1, 3, 8, 11, 27, 50, 60, 70, 80, 90, 99};
+    assertBinarySearchInt(arr2, 0, 0, false);
+    assertBinarySearchInt(arr2, 100, 11, false);
+    assertBinarySearchInt(arr2, 77, 8, false);
+    assertBinarySearchInt(arr2, 1, 0, true);
+    assertBinarySearchInt(arr2, 3, 1, true);
+    assertBinarySearchInt(arr2, 8, 2, true);
+    assertBinarySearchInt(arr2, 11, 3, true);
+    assertBinarySearchInt(arr2, 27, 4, true);
+    assertBinarySearchInt(arr2, 50, 5, true);
+    assertBinarySearchInt(arr2, 60, 6, true);
+    assertBinarySearchInt(arr2, 70, 7, true);
+    assertBinarySearchInt(arr2, 80, 8, true);
+    assertBinarySearchInt(arr2, 90, 9, true);
+    assertBinarySearchInt(arr2, 99, 10, true);
+
