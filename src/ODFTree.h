@@ -1,7 +1,7 @@
 #include "Settings.h"
 #include "utils.h"
 
-typedef char * OdfId;
+typedef const char * OdfId;
 
 // General idea is to build a prefix tree for O-DF
 // Or linked list for Path
@@ -30,8 +30,8 @@ struct ODFTree {
 
 typedef struct ODFTree ODFTree;
 
-int odfBinarySearch(ODFTree* tree, Path* needle, int* resultIndex);
+int odfBinarySearch(const ODFTree* tree, const Path* needle, int* resultIndex);
 
-Path* addPath(ODFTree* tree, char** newPath);
+Path* addPath(ODFTree* tree, const char newPath[]);
 
 //ODFTree mkODFTree();

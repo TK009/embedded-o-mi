@@ -7,7 +7,7 @@ OPTIMIZE = #-O3 -flto
 
 
 CXXSTD = -std=c++14 
-CSTD = -std=c11 
+CSTD = -std=c11 #-D_POSIX_C_SOURCE=200809L
 
 
 #CXX    = g++
@@ -115,14 +115,12 @@ clean:
 
 SHELL=/bin/bash -o pipefail
 
-#@rm -f $(BIN)/*.gcd{a,o}
+# Run tests, maybe print backtrace, run valgrind
 $(OBJDIR)/%.log: $(OBJDIR)/%.test
 	@echo -e "\nRUNNING TEST $<"
-	@LLVM_PROFILE_FILE="$(basename $<).profraw" ./$< | tee $@
+	@(LLVM_PROFILE_FILE="$(basename $<).profraw" ./$< | tee $@) || (CK_FORK=no gdb -q -ex run -ex bt -ex "kill inferiors 1" -ex quit $<; exit 1)
 	@echo -e "\nRUNNING VALGRIND" | tee -a $@
-	valgrind --leak-check=full $< >> $@
-
-	valgrind --leak-check=full $< >> $@
+	CK_FORK=no valgrind -q --leak-check=full $< >> $@
 
 
 test: $(TESTRESULTS)

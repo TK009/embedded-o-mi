@@ -72,21 +72,53 @@
 
 
 
-//#test addPathT
-//    ODFTree odf = {0};
-//
-//    ck_assert_int_eq(odf.size, 0);
-//    
-//    //char * path = "Objects/MyObject/MyInfoItem"
-//    addPath(&odf, &"Objects/MyObject/MyInfoItem");
-//
-//    ck_assert_int_eq(odf.size, 3);
-//
-//    // Size
-//    ck_assert_uint_eq(odf.sortedPaths[0].size, 1);
-//    ck_assert_uint_eq(odf.sortedPaths[1].size, 2);
-//    ck_assert_uint_eq(odf.sortedPaths[2].size, 3);
-//
-//    // Parent
-//    //ck_assert
-//    
+#test addPathT
+    ODFTree odf = {};
+
+    ck_assert_int_eq(odf.size, 0);
+    
+    //char * path = "Objects/MyObject/MyInfoItem"
+    const Path* myItem = addPath(&odf, &"Objects/MyObject/MyInfoItem");
+
+    ck_assert_int_eq(odf.size, 3);
+
+    const Path st = odf.sortedPaths[0];
+    const Path nd = odf.sortedPaths[1];
+    const Path rd = odf.sortedPaths[2];
+
+    // Depth
+    ck_assert_uint_eq(st.depth, 1);
+    ck_assert_uint_eq(nd.depth, 2);
+    ck_assert_uint_eq(rd.depth, 3);
+
+    // Parent
+    ck_assert_ptr_eq(st.parent, NULL);
+    ck_assert_ptr_eq(nd.parent, odf.sortedPaths+0);
+    ck_assert_ptr_eq(rd.parent, odf.sortedPaths+1);
+
+    // Id&len
+    ck_assert_uint_eq(st.odfIdLength, strlen("Objects"));
+    ck_assert_mem_eq(st.odfId, "Objects", st.odfIdLength);
+    ck_assert_uint_eq(nd.odfIdLength, strlen("MyObject"));
+    ck_assert_mem_eq(nd.odfId, "MyObject", nd.odfIdLength);
+    ck_assert_uint_eq(rd.odfIdLength, strlen("MyInfoItem"));
+    ck_assert_mem_eq(rd.odfId, "MyInfoItem", rd.odfIdLength);
+    
+    // idhash
+    ck_assert_uint_eq(st.idHashCode, calcHashCode("Objects"));
+    ck_assert_uint_eq(nd.idHashCode, calcHashCode("MyObject"));
+    ck_assert_uint_eq(rd.idHashCode, calcHashCode("MyInfoItem"));
+
+    // hash
+    ck_assert_uint_eq(st.hashCode, st.idHashCode);
+    ck_assert_uint_eq(nd.hashCode, nd.idHashCode ^ st.hashCode);
+    ck_assert_uint_eq(rd.hashCode, rd.idHashCode ^ nd.hashCode);
+    
+
+    // Re-add the same path should only return the pointer to it
+    const Path* myItemAgain = addPath(&odf, &"Objects/MyObject/MyInfoItem");
+
+    ck_assert_int_eq(odf.size, 3);
+    
+    ck_assert_ptr_eq(myItem, myItemAgain);
+    
