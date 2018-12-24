@@ -13,6 +13,7 @@ CSTD = -std=c11 #-D_POSIX_C_SOURCE=200809L
 #CXX    = g++
 CC     = clang
 rm     = rm -f
+GDB    = CK_FORK=no gdb
 
 # change these to set the proper directories where each files shoould be
 SRCDIR  := src
@@ -111,6 +112,7 @@ $(OBJDIR)/%.test: $(OBJDIR)/%.check.o $(OBJS)
 .PHONEY: clean debug test coverageClean
 clean:
 	$(rm) -rf $(OBJDIR)
+	$(rm) default.profraw
 	@echo "Cleanup complete!"
 
 SHELL=/bin/bash -o pipefail
@@ -118,7 +120,7 @@ SHELL=/bin/bash -o pipefail
 # Run tests, maybe print backtrace, run valgrind
 $(OBJDIR)/%.log: $(OBJDIR)/%.test
 	@echo -e "\nRUNNING TEST $<"
-	@(LLVM_PROFILE_FILE="$(basename $<).profraw" ./$< | tee $@) || (CK_FORK=no gdb -q -ex run -ex bt -ex "kill inferiors 1" -ex quit $<; exit 1)
+	@(LLVM_PROFILE_FILE="$(basename $<).profraw" ./$< | tee $@) || ($(GDB) -q -ex run -ex bt -ex "kill inferiors 1" -ex quit $<; exit 1)
 	@echo -e "\nRUNNING VALGRIND" | tee -a $@
 	CK_FORK=no valgrind -q --leak-check=full $< >> $@
 

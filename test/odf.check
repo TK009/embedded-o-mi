@@ -121,4 +121,24 @@
     ck_assert_int_eq(odf.size, 3);
     
     ck_assert_ptr_eq(myItem, myItemAgain);
-    
+
+    // Test that array insert works in the middle (_move)
+    const Path* myMiddleItem = addPath(&odf, &"Objects/AnObj/MyInfoItem");
+    myItemAgain = addPath(&odf, &"Objects/MyObject/MyInfoItem");
+
+    ck_assert_ptr_ne(myItemAgain, myMiddleItem);
+
+    const Path p0 = odf.sortedPaths[0];
+    const Path p1 = odf.sortedPaths[1];
+    const Path p2 = odf.sortedPaths[2];
+    const Path p3 = odf.sortedPaths[3];
+    const Path p4 = odf.sortedPaths[4];
+
+    ck_assert_uint_eq(p0.idHashCode, calcHashCode("Objects"));
+    ck_assert_uint_eq(p1.idHashCode, calcHashCode("AnObj"));
+    ck_assert_uint_eq(p2.idHashCode, calcHashCode("MyInfoItem"));
+    ck_assert_uint_eq(p3.idHashCode, calcHashCode("MyObject"));
+    ck_assert_uint_eq(p4.idHashCode, calcHashCode("MyInfoItem"));
+
+
+

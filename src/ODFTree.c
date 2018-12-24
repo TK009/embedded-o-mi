@@ -62,7 +62,16 @@ int odfBinarySearch(const ODFTree* tree, const Path* needle, int* result) {
 
 // Move array forward one step starting from given index
 void _move(ODFTree* tree, int index) {
-    memmove(tree->sortedPaths+1, tree->sortedPaths, tree->size - index);
+    //memmove(tree->sortedPaths+1, tree->sortedPaths, (tree->size - index) * sizeof(Path));
+
+    Path * indexPointer = tree->sortedPaths + index;
+
+    for (int i = tree->size + 1; i > index; --i) {
+        Path * moving = tree->sortedPaths+i-1;
+        if (moving->parent > indexPointer)
+            moving->parent += sizeof(Path);
+        tree->sortedPaths[i] = *moving;
+    }
 }
 
 Path* addPath(ODFTree* tree, const char pathString[]) {

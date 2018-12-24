@@ -4,7 +4,7 @@
 typedef const char * OdfId;
 
 // General idea is to build a prefix tree for O-DF
-// Or linked list for Path
+// ...in other words, linked list of each Path sharing same elements
 struct Path {
     OdfId odfId;
     struct Path* parent;
@@ -21,7 +21,6 @@ schar pathCompare(const Path* a, const Path* b);
 
 //Path mkPath(char* pathString);
 
-//Path PathFromSegments(uchar length, ...);
 
 struct ODFTree {
     Path sortedPaths[ODFTREE_SIZE];
@@ -34,4 +33,3 @@ int odfBinarySearch(const ODFTree* tree, const Path* needle, int* resultIndex);
 
 Path* addPath(ODFTree* tree, const char newPath[]);
 
-//ODFTree mkODFTree();
