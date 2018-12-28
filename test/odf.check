@@ -140,5 +140,11 @@
     ck_assert_uint_eq(p3.idHashCode, calcHashCode("MyObject"));
     ck_assert_uint_eq(p4.idHashCode, calcHashCode("MyInfoItem"));
 
+    // Parent
+    ck_assert_ptr_eq(p0.parent, NULL);
+    ck_assert_ptr_eq(p1.parent, odf.sortedPaths+0); // Objects/AnObj
+    ck_assert_ptr_eq(p2.parent, odf.sortedPaths+1); // AnObj/MyInfoItem
+    ck_assert_ptr_eq(p3.parent, odf.sortedPaths+0); // Objects/MyObject
+    ck_assert_ptr_eq(p4.parent, odf.sortedPaths+3); // MyObject/MyInfoItem
 
 

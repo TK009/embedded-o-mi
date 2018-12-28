@@ -68,8 +68,8 @@ void _move(ODFTree* tree, int index) {
 
     for (int i = tree->size + 1; i > index; --i) {
         Path * moving = tree->sortedPaths+i-1;
-        if (moving->parent > indexPointer)
-            moving->parent += sizeof(Path);
+        if (moving->parent >= indexPointer)
+            moving->parent++;
         tree->sortedPaths[i] = *moving;
     }
 }
