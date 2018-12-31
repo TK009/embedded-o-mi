@@ -5,6 +5,8 @@ typedef signed char schar;
 typedef unsigned char uchar;
 typedef unsigned int uint;
 
+typedef unsigned int time;
+
 int stringLen(const char * string);
 
 typedef uint strhash;

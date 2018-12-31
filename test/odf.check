@@ -78,7 +78,7 @@
     ck_assert_int_eq(odf.size, 0);
     
     //char * path = "Objects/MyObject/MyInfoItem"
-    const Path* myItem = addPath(&odf, &"Objects/MyObject/MyInfoItem");
+    const Path* myItem = addPath(&odf, "Objects/MyObject/MyInfoItem");
 
     ck_assert_int_eq(odf.size, 3);
 
@@ -116,15 +116,15 @@
     
 
     // Re-add the same path should only return the pointer to it
-    const Path* myItemAgain = addPath(&odf, &"Objects/MyObject/MyInfoItem");
+    const Path* myItemAgain = addPath(&odf, "Objects/MyObject/MyInfoItem");
 
     ck_assert_int_eq(odf.size, 3);
     
     ck_assert_ptr_eq(myItem, myItemAgain);
 
     // Test that array insert works in the middle (_move)
-    const Path* myMiddleItem = addPath(&odf, &"Objects/AnObj/MyInfoItem");
-    myItemAgain = addPath(&odf, &"Objects/MyObject/MyInfoItem");
+    const Path* myMiddleItem = addPath(&odf, "Objects/AnObj/MyInfoItem");
+    myItemAgain = addPath(&odf, "Objects/MyObject/MyInfoItem");
 
     ck_assert_ptr_ne(myItemAgain, myMiddleItem);
 

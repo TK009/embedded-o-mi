@@ -1,3 +1,6 @@
+#ifndef ODFTREE_H
+#define ODFTREE_H
+
 #include "Settings.h"
 #include "utils.h"
 
@@ -33,3 +36,4 @@ int odfBinarySearch(const ODFTree* tree, const Path* needle, int* resultIndex);
 
 Path* addPath(ODFTree* tree, const char newPath[]);
 
+#endif

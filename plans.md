@@ -19,6 +19,9 @@ Architecture parts
     - procedural algorithms
     - fast execution
     - can have a deadline
+* Low memory parser
+  - Handle everything by streaming ready pieces to processing functions
+  - Parse in chunks, give control to task system after chunk
 
 
 TODO - Long term plans
