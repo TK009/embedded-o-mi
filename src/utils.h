@@ -7,13 +7,23 @@ typedef unsigned int uint;
 
 typedef unsigned int time;
 
+time getTimestamp();
+
 int stringLen(const char * string);
 
 typedef uint strhash;
+typedef struct PartialHash {
+    strhash hash=0;
+    strhash mult=1;
+} PartialHash;
+
+strhash calcHashCodeC(const char * string);
 strhash calcHashCodeL(const char * string, int len);
 strhash calcHashCode(const char * string);
 
 typedef schar (*compareFunc)(const void *, const void *);
+
+typedef enum {true, false} bool;
 
 int binarySearch(
         const void* v_collection,
@@ -34,3 +44,6 @@ int binarySearch(
      _a < _b ? _a : _b; })
 
 #endif
+
+#define Noop (void)0
+

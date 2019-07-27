@@ -1,10 +1,20 @@
 #include <stdbool.h>
+#include <time.h> // timestamp
 #include "utils.h"
+
+time getTimestamp() {
+    return time(NULL);
+}
 
 int stringLen(const char * string) {
     const char * i = string;
     for (; *i != '\0'; ++i) {}
     return i - string;
+}
+
+void calcHashCodeC(const char c, PartialHash *h) {
+    h->hash += c * h->mult;
+    h->mult = (h->mult << 5u) - h->mult;
 }
 
 strhash calcHashCodeL(const char * string, int len) {

@@ -3,16 +3,27 @@
 
 #include "OMI.h"
 #include "XML.h"
+#include "utils.h"
 
+#include <string.h> //memset
 
 #ifndef ParserPoolSize
 #define ParserPoolSize 5
 #endif
 
+#ifndef ParserSinglePassLength
+#define ParserSinglePassLength 256
+#endif
+
+#ifndef ParserMaxStringLength
+#define ParserMaxStringLength 128
+#endif
+
 // Something like finite state machine here
 
 typedef enum OmiParserState {
-    //OmiState_PreOmiEnvelope,    // before "_<omiEnvelope "
+    OmiState_Ready = 0,
+    OmiState_PreOmiEnvelope,    // before "_<omiEnvelope "
     OmiState_OmiEnvelopeAttr,   // inside "<omiEnvelope _>"
     OmiState_PreVerb,           // after omeEnvelope open tag, before request verb "<omiEnvelope>_<"
     OmiState_VerbAttr,          // inside omi request verb
@@ -21,6 +32,7 @@ typedef enum OmiParserState {
 } OmiParserState;
 
 typedef enum OdfParserState {
+    OdfState_Ready = 0,
     OdfState_PreObjects,
     OdfState_ObjectsAttr,
     OdfState_PreObject,
@@ -43,11 +55,13 @@ typedef enum OdfElementType {
 } OdfElementType;
 
 struct OmiParser {
-    uint bytesRead;
-    uint bytesToRead;
     OmiRequestParameters parameters;
+    uint bytesRead;
+    uint stPosition; // tells the position in current state, used for comparison of tag names etc.
+    PartialHash stHash; // hash state to construct hash for comparison of tag and attribute names
     OmiParserState st;
     XmlState xmlst;
+    XmlState lastXmlst;
 };
 typedef struct OmiParser OmiParser;
 
