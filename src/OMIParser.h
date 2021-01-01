@@ -2,13 +2,13 @@
 #define OMIPARSER_H
 
 #include "OMI.h"
-#include "XML.h"
+#include "yxml.h"
 #include "utils.h"
 
 #include <string.h> //memset
 
 #ifndef ParserPoolSize
-#define ParserPoolSize 5
+#define ParserPoolSize 2
 #endif
 
 #ifndef ParserSinglePassLength
@@ -17,6 +17,10 @@
 
 #ifndef ParserMaxStringLength
 #define ParserMaxStringLength 128
+#endif
+
+#ifndef XmlParserBufferSize
+#define XmlParserBufferSize 512
 #endif
 
 // Something like finite state machine here
@@ -60,8 +64,8 @@ struct OmiParser {
     uint stPosition; // tells the position in current state, used for comparison of tag names etc.
     PartialHash stHash; // hash state to construct hash for comparison of tag and attribute names
     OmiParserState st;
-    XmlState xmlst;
-    XmlState lastXmlst;
+    yxml_t xmlSt;
+    void xmlBuffer[XmlParserBufferSize];
 };
 typedef struct OmiParser OmiParser;
 
