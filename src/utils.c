@@ -2,7 +2,8 @@
 #include <time.h> // timestamp
 #include "utils.h"
 
-time getTimestamp() {
+
+eomi_time getTimestamp() {
     return time(NULL);
 }
 

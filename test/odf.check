@@ -1,3 +1,4 @@
+// vim: syntax=c
 #include "ODFTree.h"
 
 #suite odf
@@ -146,5 +147,4 @@
     ck_assert_ptr_eq(p2.parent, odf.sortedPaths+1); // AnObj/MyInfoItem
     ck_assert_ptr_eq(p3.parent, odf.sortedPaths+0); // Objects/MyObject
     ck_assert_ptr_eq(p4.parent, odf.sortedPaths+3); // MyObject/MyInfoItem
-
 

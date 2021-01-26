@@ -1,3 +1,4 @@
+// vim: syntax=c
 #include "utils.h"
 #include <stdbool.h>
 

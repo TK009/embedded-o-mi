@@ -5,25 +5,30 @@ typedef signed char schar;
 typedef unsigned char uchar;
 typedef unsigned int uint;
 
-typedef unsigned int time;
+typedef unsigned int eomi_time;
 
-time getTimestamp();
+eomi_time getTimestamp();
 
 int stringLen(const char * string);
 
 typedef uint strhash;
 typedef struct PartialHash {
-    strhash hash=0;
-    strhash mult=1;
+    strhash hash;
+    strhash mult;
 } PartialHash;
+static const PartialHash emptyPartialHash = {0, 1};
 
-strhash calcHashCodeC(const char * string);
+//strhash calcHashCodeC(const char * string);
+void calcHashCodeC(const char c, PartialHash *h);
 strhash calcHashCodeL(const char * string, int len);
 strhash calcHashCode(const char * string);
 
 typedef schar (*compareFunc)(const void *, const void *);
 
-typedef enum {true, false} bool;
+#undef true
+#undef false
+#undef bool
+typedef enum {false=0, true=1} bool;
 
 int binarySearch(
         const void* v_collection,

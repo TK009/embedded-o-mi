@@ -25,8 +25,8 @@ typedef enum OmiRequestType {
 } OmiRequestType;
 
 struct OmiRequestParameters {
-    time arrival;
-    time deadline;
+    eomi_time arrival;
+    eomi_time deadline;
     OmiVersion version;
     OmiPayloadFormat format;
 };

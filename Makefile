@@ -1,7 +1,8 @@
 
 TARGET_ARCH =
 TESTFLAGS = `pkg-config --cflags check` -fprofile-instr-generate -fcoverage-mapping
-DEBUGFLAGS = $(TESTFLAGS) -g -Wall -Wextra -Wno-gnu-statement-expression -pedantic -Wno-empty-translation-unit
+DEBUGFLAGS = $(TESTFLAGS) -g -Wall -Wextra -Wno-gnu-statement-expression -pedantic -Wno-empty-translation-unit -fsanitize=address -fno-omit-frame-pointer -fsanitize-address-use-after-scope
+ASAN_OPTIONS=strict_string_checks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1
 #-Wno-reorder
 OPTIMIZE = #-O3 -flto
 
@@ -121,8 +122,9 @@ SHELL=/bin/bash -o pipefail
 $(OBJDIR)/%.log: $(OBJDIR)/%.test
 	@echo -e "\nRUNNING TEST $<"
 	@(LLVM_PROFILE_FILE="$(basename $<).profraw" ./$< | tee $@) || ($(GDB) -q -ex run -ex bt -ex "kill inferiors 1" -ex quit $<; exit 1)
-	@echo -e "\nRUNNING VALGRIND" | tee -a $@
-	CK_FORK=no valgrind -q --leak-check=full $< >> $@
+
+#@echo -e "\nRUNNING VALGRIND" | tee -a $@
+#CK_FORK=no valgrind -q --leak-check=full $< >> $@
 
 
 test: $(TESTRESULTS)

@@ -25,6 +25,19 @@ Architecture parts
   - OmiParser -> XmlParser
   - OdfParser -> OmiParser -> XmlParser
   - parse constant strings (tag names, attribute names, etc.) as hashes
+* Latest value InfoItem storage
+  - Use reference implementation HashMap and SortedSet strategy
+  - MetaDatas and value are first class O-DF paths
+  - Flags variable
+    - 0 is normal read-write InfoItem no special handling
+    - Read-only
+    - Event subscription for this path
+    - Authorization required (future flag?)
+    - OnChange script for this path
+    - OnWrite script for this path
+    - OnCall script for this path
+    - OnDelete script for this path
+    - OnRead script for this path
 
 
 TODO - Long term plans

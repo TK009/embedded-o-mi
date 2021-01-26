@@ -65,7 +65,7 @@ struct OmiParser {
     PartialHash stHash; // hash state to construct hash for comparison of tag and attribute names
     OmiParserState st;
     yxml_t xmlSt;
-    void xmlBuffer[XmlParserBufferSize];
+    char xmlBuffer[XmlParserBufferSize];
 };
 typedef struct OmiParser OmiParser;
 
