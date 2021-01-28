@@ -11,12 +11,14 @@ eomi_time getTimestamp();
 
 int stringLen(const char * string);
 
+#define FNV_prime 16777619
+#define FNV_offset_basis 2166136261
+
 typedef uint strhash;
 typedef struct PartialHash {
     strhash hash;
-    strhash mult;
 } PartialHash;
-static const PartialHash emptyPartialHash = {0, 1};
+static const PartialHash emptyPartialHash = {FNV_offset_basis};
 
 //strhash calcHashCodeC(const char * string);
 void calcHashCodeC(const char c, PartialHash *h);

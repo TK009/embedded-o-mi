@@ -6,7 +6,7 @@
 OmiParser parsers[ParserPoolSize] = {{0}};
 
 
-bool initParser() {
+OmiParser* initParser() {
     for (int i = 0; i < ParserPoolSize; ++i) {
         OmiParser * p = &parsers[i];
         if (p->st == OmiState_Ready) {
@@ -18,10 +18,10 @@ bool initParser() {
             //p->xmlst = 0;
             yxml_init(&p->xmlSt, &p->xmlBuffer, XmlParserBufferSize);
 
-            return true;
+            return p;
         }
     }
-    return false;
+    return NULL;
 }
 
 
@@ -30,7 +30,8 @@ bool initParser() {
 int runParser(OmiParser * p) {
     char nameString[32];
     for (uint passLength = ParserSinglePassLength; passLength > 0; --passLength) {
-        passLength += runXmlParser(p, ParserSinglePassLength - passLength, nameString, sizeof(nameString));
+        yxml_ret_t r = runXmlParser(p, ParserSinglePassLength - passLength, nameString, sizeof(nameString));
+        // TODO 
         switch (p->st) {
             case OmiState_Ready:
                 break;
@@ -50,6 +51,11 @@ int runParser(OmiParser * p) {
     }
 }
 
-
-int runXmlParser(OmiParser * p, uint maxBytes, char *stringReturn, uint stringReturnLength) {
+// TODO how to pass characters
+yxml_ret_t runXmlParser(OmiParser * p, uint *current, uint maxBytes, char *stringReturn, uint stringReturnLength) {
+    for(; *doc; doc++) {
+        yxml_ret_t r = yxml_parse(x, *doc);
+        if(r != YXML_OK)
+            return r
+    }
 }

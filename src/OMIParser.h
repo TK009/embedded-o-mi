@@ -76,6 +76,11 @@ struct OdfParser {
 typedef struct OdfParser OdfParser;
 
 
-typedef schar (*CharInputF)(const void *, const void *);
+// Parser input pull function with any pointer parameter, parameter is saved to parser state
+typedef schar (*CharInputF)(void *);
+typedef struct ParserSource {
+  CharInputF *getChar,
+  void * parameter
+} ParserSource;
 
 #endif

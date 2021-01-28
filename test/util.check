@@ -11,12 +11,20 @@ schar intCompare(const int *a, const int *b) { return (*a < *b)? -1 : ((*a > *b)
     ck_assert_int_eq(stringLen(""), 0);
 
 #test hashCodeT
-    ck_assert_uint_eq(calcHashCode(""), 0);
-    ck_assert_uint_eq(calcHashCode("a"), 97);
-    ck_assert_uint_eq(calcHashCode("ab"), 3105);
-    ck_assert_uint_eq(calcHashCode("test"), 3556498);
-    ck_assert_uint_eq(calcHashCode("tset"), 3569518);
-    ck_assert_uint_eq(calcHashCode("MyInfoItem"), 2631937741);
+    ck_assert_uint_eq(calcHashCode(""),           2166136261);
+    ck_assert_uint_eq(calcHashCode("a"),          3826002220);
+    ck_assert_uint_eq(calcHashCode("ab"),         1294271946);
+    ck_assert_uint_eq(calcHashCode("test"),       2949673445);
+    ck_assert_uint_eq(calcHashCode("tset"),       4291670689);
+    ck_assert_uint_eq(calcHashCode("MyInfoItem"), 3974904096);
+    ck_assert_uint_eq(calcHashCodeL("test", 4),   2949673445);
+    ck_assert_uint_eq(calcHashCode("costarring"), calcHashCode("liquid")); // check correctness against known collision
+
+    PartialHash phash = emptyPartialHash;
+    calcHashCodeC('a', &phash);
+    calcHashCodeC('b', &phash);
+    calcHashCodeC('c', &phash);
+    ck_assert_uint_eq(phash.hash, calcHashCode("abc"));
 
 #test binarySearchT
 #define assertBinarySearchInt(arr, search, expectedRes, expectedRet) \
@@ -35,18 +43,21 @@ schar intCompare(const int *a, const int *b) { return (*a < *b)? -1 : ((*a > *b)
     assertBinarySearchInt(arr1, 2, 1, false);
 
     int arr2[] = {1, 3, 8, 11, 27, 50, 60, 70, 80, 90, 99};
-    assertBinarySearchInt(arr2, 0, 0, false);
+    assertBinarySearchInt(arr2, 0,   0,  false);
     assertBinarySearchInt(arr2, 100, 11, false);
-    assertBinarySearchInt(arr2, 77, 8, false);
-    assertBinarySearchInt(arr2, 1, 0, true);
-    assertBinarySearchInt(arr2, 3, 1, true);
-    assertBinarySearchInt(arr2, 8, 2, true);
-    assertBinarySearchInt(arr2, 11, 3, true);
-    assertBinarySearchInt(arr2, 27, 4, true);
-    assertBinarySearchInt(arr2, 50, 5, true);
-    assertBinarySearchInt(arr2, 60, 6, true);
-    assertBinarySearchInt(arr2, 70, 7, true);
-    assertBinarySearchInt(arr2, 80, 8, true);
-    assertBinarySearchInt(arr2, 90, 9, true);
-    assertBinarySearchInt(arr2, 99, 10, true);
+    assertBinarySearchInt(arr2, 77,  8,  false);
+    assertBinarySearchInt(arr2, 1,   0,  true);
+    assertBinarySearchInt(arr2, 3,   1,  true);
+    assertBinarySearchInt(arr2, 8,   2,  true);
+    assertBinarySearchInt(arr2, 11,  3,  true);
+    assertBinarySearchInt(arr2, 27,  4,  true);
+    assertBinarySearchInt(arr2, 50,  5,  true);
+    assertBinarySearchInt(arr2, 60,  6,  true);
+    assertBinarySearchInt(arr2, 70,  7,  true);
+    assertBinarySearchInt(arr2, 80,  8,  true);
+    assertBinarySearchInt(arr2, 90,  9,  true);
+    assertBinarySearchInt(arr2, 99,  10, true);
+
+#test otherT
+    ck_assert_uint_gt(getTimestamp(), 1611779299);
 

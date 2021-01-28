@@ -13,23 +13,29 @@ int stringLen(const char * string) {
     return i - string;
 }
 
+// 
 void calcHashCodeC(const char c, PartialHash *h) {
-    h->hash += c * h->mult;
-    h->mult = (h->mult << 5u) - h->mult;
+    h->hash ^= c;
+    h->hash *= FNV_prime;
 }
 
 strhash calcHashCodeL(const char * string, int len) {
-    uint hash = 0;
-    uint mult = 1;
-    for (const char * c = string + len - 1; c >= string; --c) {
-        hash += *c * mult;
-        mult = (mult << 5u) - mult;
+    uint hash = FNV_offset_basis;
+    for (int i = 0; i < len; ++i){
+      hash ^= (uint)string[i];
+      hash *= FNV_prime;
     }
     return hash;
 }
 
 strhash calcHashCode(const char * string) {
-    return calcHashCodeL(string, stringLen(string));
+    uint hash = FNV_offset_basis;
+    char c;
+    while ((c = *string++)) {
+      hash ^= (uint)c;
+      hash *= FNV_prime;
+    }
+    return hash;
 }
 
 

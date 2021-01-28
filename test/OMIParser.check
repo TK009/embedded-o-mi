@@ -1,0 +1,9 @@
+// vim: syntax=c
+#include "OMIParser.h"
+
+#suite OMIParser
+
+#test write
+    OMIParser* p = initParser();
+    
+
