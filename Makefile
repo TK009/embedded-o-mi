@@ -131,7 +131,7 @@ $(OBJDIR)/%.log: $(OBJDIR)/%.test
 test: $(TESTRESULTS)
 	@echo
 	@llvm-profdata merge -sparse $(TESTDATA) -o $(OBJDIR)/default.profdata
-	@llvm-cov report -instr-profile=$(OBJDIR)/default.profdata $(OBJDIR)/odf.test
+	@llvm-cov report -instr-profile=$(OBJDIR)/default.profdata $(OBJDIR)/odf.test $(addprefix "-object=", $(TESTBINARIES))
 
 coverageclean:
 	@rm -f $(OBJDIR)/*.prof{raw,data}

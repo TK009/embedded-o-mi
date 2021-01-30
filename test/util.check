@@ -60,4 +60,10 @@ schar intCompare(const int *a, const int *b) { return (*a < *b)? -1 : ((*a > *b)
 
 #test otherT
     ck_assert_uint_gt(getTimestamp(), 1611779299);
+    yield();
+    ck_assert_int_eq(first1Bit(1), 0);
+    ck_assert_int_eq(first1Bit(4), 2);
+    ck_assert_int_eq(first1Bit(19904), 6);
+    ck_assert_int_eq(first1Bit(0xFFFFFFFF), 0);
+    ck_assert_int_eq(first0Bit(0xFFFF0FFF), 12);
 

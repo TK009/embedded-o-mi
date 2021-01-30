@@ -4,6 +4,7 @@
 typedef signed char schar;
 typedef unsigned char uchar;
 typedef unsigned int uint;
+typedef unsigned short ushort;
 
 typedef unsigned int eomi_time;
 
@@ -50,7 +51,13 @@ int binarySearch(
      __typeof__ (b) _b = (b); \
      _a < _b ? _a : _b; })
 
-#endif
 
 #define Noop (void)0
 
+void yield();
+
+int bitCount(uint u);
+int first1Bit(int i);
+int first0Bit(int i);
+
+#endif

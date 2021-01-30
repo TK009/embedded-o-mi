@@ -12,7 +12,7 @@
 #endif
 
 #ifndef ParserSinglePassLength
-#define ParserSinglePassLength 256
+#define ParserSinglePassLength 1024
 #endif
 
 #ifndef ParserMaxStringLength
@@ -59,11 +59,12 @@ typedef enum OdfElementType {
 } OdfElementType;
 
 struct OmiParser {
-    OmiRequestParameters parameters;
+    uchar connectionId;
     uint bytesRead;
     uint stPosition; // tells the position in current state, used for comparison of tag names etc.
     PartialHash stHash; // hash state to construct hash for comparison of tag and attribute names
     OmiParserState st;
+    OmiRequestParameters parameters;
     yxml_t xmlSt;
     char xmlBuffer[XmlParserBufferSize];
 };
@@ -76,11 +77,19 @@ struct OdfParser {
 typedef struct OdfParser OdfParser;
 
 
-// Parser input pull function with any pointer parameter, parameter is saved to parser state
-typedef schar (*CharInputF)(void *);
-typedef struct ParserSource {
-  CharInputF *getChar,
-  void * parameter
-} ParserSource;
+//// Parser input character pull function with any pointer parameter, parameter is saved to parser state
+//// scrapped: use connection ids push chunk strategy instead
+//typedef schar (*CharInputF)(void *);
+//typedef struct ParserSource {
+//  CharInputF *getChar;
+//  void * parameter;
+//} ParserSource;
+
+OmiParser* initParser(uchar connectionId);
+int runParser(OmiParser * p, char * inputChunk);
+yxml_ret_t runXmlParser(OmiParser * p, char ** inputChunkP, uint maxBytes);
+
+//StringStorage stringStorage;
+
 
 #endif

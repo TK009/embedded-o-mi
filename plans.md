@@ -48,3 +48,9 @@ TODO - Long term plans
 * Check struct packing
 * Use skip list for ODF storage
 
+Useful algos and structures
+--------------------
+
+* Shell sort
+* Monotonic key hash table
+* skip list

@@ -1,0 +1,84 @@
+// vim: syntax=c
+#include "MemoryPool.h"
+
+#suite MemoryPool
+
+CreateMemoryPool(int, intPool, 2)
+int *item2;
+int *item1;
+int *item;
+
+#test smallPoolAllocT
+  ck_assert_int_eq(intPool.freeCount, 64);
+  ck_assert_int_eq(intPool.totalCount, 64);
+  ck_assert_int_eq(intPool.blockCount, 2);
+  ck_assert_int_eq(intPool.currentBlock, 0);
+  ck_assert_int_eq(intPool.elementSize, 4);
+  ck_assert_uint_eq(intPool.reservedBitArray[0], 0);
+  ck_assert_uint_eq(intPool.reservedBitArray[1], 0);
+  item1 = poolAlloc(&intPool);
+  ck_assert_ptr_ne(item1, NULL);
+  *item1 = 1234567890;
+  ck_assert_int_eq(*item1, 1234567890);
+  ck_assert_int_eq(((int*)intPool.data)[0], 1234567890);
+  ck_assert_int_eq(intPool.freeCount, 63);
+  ck_assert_uint_eq(intPool.reservedBitArray[0], 1);
+  item2 = poolCAlloc(&intPool);
+  ck_assert_ptr_ne(item2, NULL);
+  ck_assert_int_eq(*item2, 0);
+  *item2 = 0x12345678;
+  ck_assert_int_eq(intPool.freeCount, 62);
+  ck_assert_uint_eq(intPool.reservedBitArray[1], 0);
+  ck_assert_uint_eq(intPool.reservedBitArray[0], 3);
+  ck_assert_int_eq(((int*)intPool.data)[0], 1234567890);
+  ck_assert_int_eq(((int*)intPool.data)[1], 0x12345678);
+
+//#test nextBlockAndFilledPoolT
+  for (int i = 2; i < 32; ++i) {
+    item = poolAlloc(&intPool);
+    ck_assert_ptr_ne(item, NULL);
+  }
+
+  ck_assert_int_eq(intPool.freeCount, 32);
+  ck_assert_uint_eq(intPool.reservedBitArray[0], 0xFFFFFFFF);
+  ck_assert_int_eq(intPool.reservedBitArray[1], 0);
+  poolAlloc(&intPool);
+  ck_assert_uint_eq(intPool.reservedBitArray[0], 0xFFFFFFFF);
+  ck_assert_uint_eq(intPool.reservedBitArray[1], 1);
+  ck_assert_int_eq(intPool.currentBlock, 1);
+
+  for (int i = 1; i < 32; ++i) {
+    item = poolAlloc(&intPool);
+    ck_assert_ptr_ne(item, NULL);
+  }
+  ck_assert_int_eq(intPool.freeCount, 0);
+  ck_assert_uint_eq(intPool.reservedBitArray[1], 0xFFFFFFFF);
+  item = poolAlloc(&intPool);
+  ck_assert_ptr_eq(item, NULL);
+
+//test freePoolT
+  poolFree(&intPool, item2);
+  ck_assert_ptr_eq(item2, NULL);
+  ck_assert_int_eq(intPool.freeCount, 1);
+  poolFree(&intPool, item1);
+  ck_assert_ptr_eq(item1, NULL);
+  ck_assert_int_eq(intPool.freeCount, 2);
+  item = poolCAlloc(&intPool);
+  ck_assert_ptr_ne(item, NULL);
+  ck_assert_int_eq(*item, 0);
+
+
+  item = poolAlloc(&intPool);
+  ck_assert_ptr_ne(item, NULL);
+  // non-zeroed memory should have the old value (check that correct place has been returned)
+  ck_assert_int_eq(*item, 0x12345678);
+
+  for (int i = 0; i < 64; ++i) {
+    item = &((int*)intPool.data)[i];
+    poolFree(&intPool, item);
+  }
+  ck_assert_int_eq(intPool.freeCount, 64);
+  ck_assert_uint_eq(intPool.reservedBitArray[0], 0);
+  ck_assert_uint_eq(intPool.reservedBitArray[1], 0);
+
+

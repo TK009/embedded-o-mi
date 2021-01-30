@@ -4,6 +4,6 @@
 #suite OMIParser
 
 #test write
-    OMIParser* p = initParser();
+    OmiParser* p = initParser(0);
     
 

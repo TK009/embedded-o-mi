@@ -62,4 +62,26 @@ int binarySearch(const void* v_collection, const void* needle, int length, int e
     return false;
 }
 
+#ifndef YIELD
+void yield(){}
+#endif
+
+
+int bitCount(uint u) {
+    uint uCount;
+
+    uCount = u
+        - ((u >> 1) & 033333333333)
+        - ((u >> 2) & 011111111111);
+    return ((uCount + (uCount >> 3)) & 030707070707) % 63;
+}
+
+int first1Bit(int i) {
+    return bitCount((i&(-i))-1);
+}
+int first0Bit(int i) {
+    i = ~i;
+    return bitCount((i&(-i))-1);
+}
+
 
