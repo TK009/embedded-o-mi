@@ -1,4 +1,29 @@
 #include "MemoryPool.h"
+
+MemoryPool* CreateDynamicMemoryPool(size_t elementSize, uint blockCount, void* (*alloc)(size_t)){
+    size_t      numElements      = PoolSize(blockCount);
+    size_t      poolSizeBytes    = elementSize*numElements;
+    uint*       reservedBitArray = alloc(blockCount*sizeof(uint));
+    uint*       poolData         = alloc(poolSizeBytes);
+    MemoryPool* result           = alloc(sizeof(*result));
+
+    if (reservedBitArray && poolData && result) {
+        *result = (MemoryPool){ 0, blockCount, elementSize, numElements, numElements, reservedBitArray, poolData };
+        return result;
+    }
+    return NULL;
+}
+
+void FreeDynamicMemoryPool_(MemoryPool** p_pool, void (*free)(void*)) {
+    if (*p_pool) {
+        MemoryPool *pool = *p_pool;
+        free(pool->reservedBitArray);
+        free(pool->data);
+        free(pool);
+        *p_pool = NULL;
+    }
+}
+
 // Return NULL on failed allocation, otherwise pointer to allocated object
 void* poolAlloc(MemoryPool *pool) {
   if (pool->freeCount == 0) return NULL;
@@ -28,13 +53,17 @@ void* poolCAlloc(MemoryPool *pool) {
 
 // Free element indicated by pointer to the start of the element
 void poolFree_(MemoryPool *pool, void** element) {
-  int memoryOffset = (char*)*element - (char*) pool->data;
-  int elementNumber = memoryOffset / pool->elementSize;
-  ushort blockNum = elementNumber / BlockSize;
-  int bitLocation = elementNumber - blockNum * BlockSize;
+    if (*element) {
+      int memoryOffset = (char*)*element - (char*) pool->data;
+      int elementNumber = memoryOffset / pool->elementSize;
+      ushort blockNum = elementNumber / BlockSize;
+      int bitLocation = elementNumber - blockNum * BlockSize;
 
-  pool->reservedBitArray[blockNum] ^= 1 << bitLocation;
-  pool->freeCount++;
-  *element = NULL;
+      //if (pool->reservedBitArray[blockNum] & (1 << bitLocation)) {
+      pool->reservedBitArray[blockNum] ^= 1 << bitLocation;
+      pool->freeCount++;
+      //}
+      *element = NULL;
+    }
 }
 

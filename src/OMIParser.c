@@ -38,6 +38,7 @@ int runParser(OmiParser * p, char * inputChunk) {
         if (r == YXML_OK) continue;
         // TODO Parser can return 8 byte strings or xml event
         // To handle strings, a string storage is made with a block of memory and hash table with a skip list; skip list needs memory pool
+        // Buffer is needed for strings not yet fully received
         switch (p->st) {
             case OmiState_Ready:
                 break;

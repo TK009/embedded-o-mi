@@ -1,6 +1,8 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <stdlib.h> // size_t
+
 typedef signed char schar;
 typedef unsigned char uchar;
 typedef unsigned int uint;
@@ -27,6 +29,7 @@ strhash calcHashCodeL(const char * string, int len);
 strhash calcHashCode(const char * string);
 
 typedef schar (*compareFunc)(const void *, const void *);
+schar intCompare(const int *a, const int *b);
 
 #undef true
 #undef false
@@ -59,5 +62,10 @@ void yield();
 int bitCount(uint u);
 int first1Bit(int i);
 int first0Bit(int i);
+
+void *memdup(void* mem, const void *src, size_t sz);
+
+#define ALLOC_INIT(alloc, type, ...)   \
+    (type *)memdup(alloc(sizeof(type)), (type[]){ __VA_ARGS__  }, sizeof(type))
 
 #endif

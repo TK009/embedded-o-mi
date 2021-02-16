@@ -83,5 +83,9 @@ int first0Bit(int i) {
     i = ~i;
     return bitCount((i&(-i))-1);
 }
+schar intCompare(const int *a, const int *b) { return (*a < *b)? -1 : ((*a > *b)? 1 : 0); }
 
+void *memdup(void* mem, const void *src, size_t sz) {
+    return mem ? memcpy(mem, src, sz) : NULL;
+}
 

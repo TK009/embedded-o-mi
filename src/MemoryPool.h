@@ -15,13 +15,19 @@ typedef struct MemoryPool {
   void *data; // Size = elementSize * totalCount
 } MemoryPool;
 
-#define BlockSize (sizeof(uint)*8)
-#define poolSize(BLOCK_COUNT) (BLOCK_COUNT*BlockSize)
+#define BlockSize (sizeof(uint)*8) // 32, because bitstring consists of uints
+#define PoolSize(BLOCK_COUNT) (BLOCK_COUNT*BlockSize)
 
-#define CreateMemoryPool(TYPE, NAME, BLOCK_COUNT) \
+// size will be BLOCK_COUNT*BlockSize
+#define CreateStaticMemoryPool(TYPE, NAME, BLOCK_COUNT) \
   static uint NAME ## Free[BLOCK_COUNT] = {0}; \
-  static TYPE NAME ## Data[poolSize(BLOCK_COUNT)] = {0}; \
-  static MemoryPool NAME = { 0, BLOCK_COUNT, sizeof(TYPE), 32*BLOCK_COUNT, 32*BLOCK_COUNT, (uint *)&(NAME ## Free), (void*)&(NAME ## Data) };
+  static TYPE NAME ## Data[PoolSize(BLOCK_COUNT)] = {0}; \
+  static MemoryPool NAME = { 0, BLOCK_COUNT, sizeof(TYPE), PoolSize(BLOCK_COUNT), PoolSize(BLOCK_COUNT), (uint *)&(NAME ## Free), (void*)&(NAME ## Data) };
+
+// Create pool using the given allocation function
+MemoryPool* CreateDynamicMemoryPool(size_t elementSize, uint blockCount, void* (*alloc)(size_t));
+void FreeDynamicMemoryPool_(MemoryPool** p_pool, void (*free)(void*));
+#define FreeDynamicMemoryPool(pool, free) FreeDynamicMemoryPool_(&(pool), (free))
 
 // Return NULL on failed allocation, otherwise pointer to allocated object
 void* poolAlloc(MemoryPool *pool);
