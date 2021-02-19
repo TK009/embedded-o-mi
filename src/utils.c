@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <time.h> // timestamp
+#include <string.h>
 #include "utils.h"
 
 
@@ -83,9 +84,12 @@ int first0Bit(int i) {
     i = ~i;
     return bitCount((i&(-i))-1);
 }
-schar intCompare(const int *a, const int *b) { return (*a < *b)? -1 : ((*a > *b)? 1 : 0); }
+schar int_compare(const int *a, const int *b) { return (*a < *b)? -1 : ((*a > *b)? 1 : 0); }
+schar uint_compare(const uint *a, const uint *b) { return (*a < *b)? -1 : ((*a > *b)? 1 : 0); }
 
-void *memdup(void* mem, const void *src, size_t sz) {
-    return mem ? memcpy(mem, src, sz) : NULL;
+HString* HString_init(HString* hs, char* str){ if (hs) *hs = (HString){str, calcHashCode(str)}; return hs; }
+schar HString_compare(const HString *a, const HString *b) {
+    return (a->hash < b->hash)? -1 : ((a->hash > b->hash)? 1 : strcmp(a->value, b->value));
 }
+
 

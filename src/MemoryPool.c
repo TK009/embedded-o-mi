@@ -1,25 +1,29 @@
 #include "MemoryPool.h"
 
-MemoryPool* CreateDynamicMemoryPool(size_t elementSize, uint blockCount, void* (*alloc)(size_t)){
+MemoryPool* CreateDynamicMemoryPool(size_t elementSize, uint blockCount, Allocator *a){
     size_t      numElements      = PoolSize(blockCount);
     size_t      poolSizeBytes    = elementSize*numElements;
-    uint*       reservedBitArray = alloc(blockCount*sizeof(uint));
-    uint*       poolData         = alloc(poolSizeBytes);
-    MemoryPool* result           = alloc(sizeof(*result));
+    uint*       reservedBitArray = a->calloc(blockCount,sizeof(uint));
+    void*       poolData         = a->calloc(poolSizeBytes,sizeof(char));
+    MemoryPool* result           = a->malloc(sizeof(*result));
+
 
     if (reservedBitArray && poolData && result) {
         *result = (MemoryPool){ 0, blockCount, elementSize, numElements, numElements, reservedBitArray, poolData };
         return result;
     }
+    free(reservedBitArray);
+    free(poolData);
+    free(result);
     return NULL;
 }
 
-void FreeDynamicMemoryPool_(MemoryPool** p_pool, void (*free)(void*)) {
+void FreeDynamicMemoryPool_(MemoryPool** p_pool, Allocator* a) {
     if (*p_pool) {
         MemoryPool *pool = *p_pool;
-        free(pool->reservedBitArray);
-        free(pool->data);
-        free(pool);
+        a->free(pool->reservedBitArray);
+        a->free(pool->data);
+        a->free(pool);
         *p_pool = NULL;
     }
 }
@@ -56,14 +60,14 @@ void poolFree_(MemoryPool *pool, void** element) {
     if (*element) {
         int memoryOffset = (char*)*element - (char*) pool->data;
         int elementNumber = memoryOffset / pool->elementSize;
-      ushort blockNum = elementNumber / BlockSize;
-      int bitLocation = elementNumber - blockNum * BlockSize;
+        ushort blockNum = elementNumber / BlockSize;
+        int bitLocation = elementNumber - blockNum * BlockSize;
 
-      //if (pool->reservedBitArray[blockNum] & (1 << bitLocation)) {
-      pool->reservedBitArray[blockNum] ^= 1 << bitLocation;
-      pool->freeCount++;
-      //}
-      *element = NULL;
+        //if (pool->reservedBitArray[blockNum] & (1 << bitLocation)) {
+        pool->reservedBitArray[blockNum] ^= 1 << bitLocation;
+        pool->freeCount++;
+        //}
+        *element = NULL;
     }
 }
 

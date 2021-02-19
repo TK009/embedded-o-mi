@@ -25,9 +25,9 @@ typedef struct MemoryPool {
   static MemoryPool NAME = { 0, BLOCK_COUNT, sizeof(TYPE), PoolSize(BLOCK_COUNT), PoolSize(BLOCK_COUNT), (uint *)&(NAME ## Free), (void*)&(NAME ## Data) };
 
 // Create pool using the given allocation function
-MemoryPool* CreateDynamicMemoryPool(size_t elementSize, uint blockCount, void* (*alloc)(size_t));
-void FreeDynamicMemoryPool_(MemoryPool** p_pool, void (*free)(void*));
-#define FreeDynamicMemoryPool(pool, free) FreeDynamicMemoryPool_(&(pool), (free))
+MemoryPool* CreateDynamicMemoryPool(size_t elementSize, uint blockCount, Allocator* a);
+void FreeDynamicMemoryPool_(MemoryPool** p_pool, Allocator* a);
+#define FreeDynamicMemoryPool(pool, a) FreeDynamicMemoryPool_(&(pool), (a))
 
 // Return NULL on failed allocation, otherwise pointer to allocated object
 void* poolAlloc(MemoryPool *pool);

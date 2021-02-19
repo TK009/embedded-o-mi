@@ -2,7 +2,7 @@
 TARGET_ARCH =
 BASEFLAGS = `pkg-config --cflags check`
 TESTFLAGS = -fprofile-instr-generate -fcoverage-mapping -fsanitize=address -fno-omit-frame-pointer -fsanitize-address-use-after-scope
-DEBUGFLAGS = $(TESTFLAGS) -g -Wall -Wextra -Wno-gnu-statement-expression -pedantic -Wno-empty-translation-unit
+DEBUGFLAGS = $(TESTFLAGS) -g -Wall -Wextra -Wno-gnu-statement-expression -pedantic -Wno-empty-translation-unit -Wno-gnu-folding-constant
 ASAN_OPTIONS=strict_string_checks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1
 #-Wno-reorder
 OPTIMIZE = #-O3 -flto
@@ -13,7 +13,7 @@ CSTD = -std=c11 #-D_POSIX_C_SOURCE=200809L
 
 
 #CXX    = g++
-CC     = clang
+CC     = @clang
 rm     = rm -f
 GDB    = CK_FORK=no gdb
 
@@ -84,10 +84,12 @@ POSTCOMPILE = @mv -f $(DEPDIR)/$*.Td $(DEPDIR)/$*.d && touch $@
 %.o : %.c
 #%.o : %.c $(DEPDIR)/%.d
 $(OBJDIR)/%.check.o: $(OBJDIR)/%.check.c $(DEPDIR)/%.d
+	@echo C $@
 	$(COMPILE.c) $(OUTPUT_OPTION) $<
 	$(POSTCOMPILE)
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c $(DEPDIR)/%.d | $(OBJDIR)
+	@echo C $@
 	$(COMPILE.c) $(OUTPUT_OPTION) $<
 	$(POSTCOMPILE)
 
@@ -100,7 +102,7 @@ $(OBJDIR)/%.test: $(OBJDIR)/%.check.o $(OBJS)
 	@echo
 	@echo "LINKING $@!"
 	$(CC) -o $@ $(LDTESTFLAGS) $(DEBUGFLAGS) $^
-	@echo "LINKING $@ complete!"
+#@echo "LINKING $@ complete!"
 
 
 
@@ -111,7 +113,7 @@ $(OBJDIR)/%.test: $(OBJDIR)/%.check.o $(OBJS)
 #	@$(CC) $(MYCFLAGS) -MM $< -MF $(OBJDIR)/$*.d # dependencies
 #	@sed -i '1s|^.*:|$@:|' $(OBJDIR)/$*.d # fix target path 
 
-.PHONEY: clean debug test coverageClean
+.PHONEY: clean debug test coverageclean coverage
 clean:
 	$(rm) -rf $(OBJDIR)
 	$(rm) default.profraw
@@ -132,6 +134,9 @@ test: $(TESTRESULTS)
 	@echo
 	@llvm-profdata merge -sparse $(TESTDATA) -o $(OBJDIR)/default.profdata
 	@llvm-cov report -instr-profile=$(OBJDIR)/default.profdata $(OBJDIR)/odf.test $(addprefix "-object=", $(TESTBINARIES))
+
+coverage:
+	@llvm-cov show $(TESTBINARIES) -instr-profile ./obj/default.profdata
 
 coverageclean:
 	@rm -f $(OBJDIR)/*.prof{raw,data}

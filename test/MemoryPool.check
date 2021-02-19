@@ -3,10 +3,19 @@
 
 #suite MemoryPool
 
-CreateMemoryPool(int, intPool, 2)
+CreateStaticMemoryPool(int, intPool, 2)
 int *item2;
 int *item1;
 int *item;
+static void* nulloc(size_t s){
+  (void) s;
+  return NULL;
+}
+static void* culloc(size_t s, size_t n){
+  (void) s; (void)n;
+  return NULL;
+}
+static const Allocator nullocator = {.malloc = nulloc, .calloc = culloc, .free = free};
 
 #test smallPoolAllocT
   ck_assert_int_eq(intPool.freeCount, 64);
@@ -81,4 +90,22 @@ int *item;
   ck_assert_uint_eq(intPool.reservedBitArray[0], 0);
   ck_assert_uint_eq(intPool.reservedBitArray[1], 0);
 
-
+#test dynamicMemoryPoolT
+  MemoryPool* shortPool = CreateDynamicMemoryPool(sizeof(short), 2, &stdAllocator);
+  ck_assert_int_eq(shortPool->freeCount, 64);
+  ck_assert_int_eq(shortPool->totalCount, 64);
+  ck_assert_int_eq(shortPool->blockCount, 2);
+  ck_assert_int_eq(shortPool->currentBlock, 0);
+  ck_assert_int_eq(shortPool->elementSize, 2);
+  ck_assert_uint_eq(shortPool->reservedBitArray[0], 0);
+  ck_assert_uint_eq(shortPool->reservedBitArray[1], 0);
+  short *item;
+  for (int i = 1; i < 33; ++i) {
+    item = poolAlloc(shortPool);
+    ck_assert_ptr_ne(item, NULL);
+    ck_assert_int_eq(shortPool->freeCount, 64-i);
+  }
+  FreeDynamicMemoryPool(shortPool, &stdAllocator);
+  MemoryPool* tmp = CreateDynamicMemoryPool(sizeof(short), 2, &nullocator);
+  ck_assert_ptr_eq(tmp, NULL);
+  FreeDynamicMemoryPool(tmp, &nullocator);

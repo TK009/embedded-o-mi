@@ -2,7 +2,6 @@
 #include "utils.h"
 #include <stdbool.h>
 
-schar intCompare(const int *a, const int *b) { return (*a < *b)? -1 : ((*a > *b)? 1 : 0); }
 
 #suite utils
 
@@ -29,7 +28,7 @@ schar intCompare(const int *a, const int *b) { return (*a < *b)? -1 : ((*a > *b)
 #test binarySearchT
 #define assertBinarySearchInt(arr, search, expectedRes, expectedRet) \
     needle = search; \
-    returnCode = binarySearch(arr, &needle, sizeof(arr)/sizeof(*arr), sizeof(*arr), (compareFunc) intCompare, &result); \
+    returnCode = binarySearch(arr, &needle, sizeof(arr)/sizeof(*arr), sizeof(*arr), (compareFunc) int_compare, &result); \
     ck_assert_int_eq(returnCode, expectedRet); \
     ck_assert_int_eq(result, expectedRes) \
 
@@ -66,4 +65,19 @@ schar intCompare(const int *a, const int *b) { return (*a < *b)? -1 : ((*a > *b)
     ck_assert_int_eq(first1Bit(19904), 6);
     ck_assert_int_eq(first1Bit(0xFFFFFFFF), 0);
     ck_assert_int_eq(first0Bit(0xFFFF0FFF), 12);
+
+    HString strA, strB, costarring, liquid;
+    HString_init(&strA, "TestA");
+    HString_init(&strB, "TestB");
+    HString_init(&costarring, "costarring");
+    HString_init(&liquid, "liquid");
+    uint aa = 0xFFFFFFFF, bb = 0xFFFFFFFE, a = 0, b = 1, c = 2;
+    ck_assert_int_eq(uint_compare(&aa, &bb), 1);
+    ck_assert_int_eq(uint_compare(&b, &c), -1);
+    ck_assert_int_eq(uint_compare(&a, &a), 0);
+    ck_assert_int_eq(HString_compare(&strA, &strA), 0);
+    ck_assert_int_eq(HString_compare(&strB, &strB), 0);
+    ck_assert_int_eq(HString_compare(&strA, &strB), -1);
+    ck_assert_int_eq(HString_compare(&strB, &strA), 1);
+    ck_assert_int_eq(HString_compare(&liquid, &costarring), strcmp("liquid", "costarring"));
 

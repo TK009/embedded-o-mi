@@ -28,9 +28,11 @@
 typedef enum OmiParserState {
     OmiState_Ready = 0,
     OmiState_PreOmiEnvelope,    // before "_<omiEnvelope "
-    OmiState_OmiEnvelopeAttr,   // inside "<omiEnvelope _>"
-    OmiState_PreVerb,           // after omeEnvelope open tag, before request verb "<omiEnvelope>_<"
-    OmiState_VerbAttr,          // inside omi request verb
+    //OmiState_OmiEnvelopeAttr,   // inside "<omiEnvelope _>"
+    OmiState_OmiEnvelope,   // inside "<omiEnvelope _>" or after
+    //OmiState_PreVerb,           // after omeEnvelope open tag, before request verb "<omiEnvelope>_<"
+    //OmiState_VerbAttr,          // inside omi request verb
+    OmiState_Verb,          // inside omi request verb
     OmiState_PreMsg,
     OmiState_Msg,
 } OmiParserState;
@@ -65,6 +67,7 @@ struct OmiParser {
     PartialHash stHash; // hash state to construct hash for comparison of tag and attribute names
     OmiParserState st;
     OmiRequestParameters parameters;
+    char stringLength[ParserMaxStringLength];
     yxml_t xmlSt;
     char xmlBuffer[XmlParserBufferSize];
 };
@@ -90,6 +93,7 @@ int runParser(OmiParser * p, char * inputChunk);
 yxml_ret_t runXmlParser(OmiParser * p, char ** inputChunkP, uint maxBytes);
 
 //StringStorage stringStorage;
+
 
 
 #endif

@@ -14,3 +14,11 @@ Features
 
 * In-memory, linear array store for O-DF paths (in http get format of the standards)
 
+TODO
+------
+
+Sorted by about highest to lowest priority:
+
+* Parser error messages
+* Flash storage
+* Parser named xmlns attributes
