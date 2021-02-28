@@ -26,17 +26,21 @@ typedef enum OmiRequestType {
     OmiCancel,
     OmiDelete,
     OmiResponse,
+    OmiPoll,
     OmiCall
 } OmiRequestType;
 
-struct OmiRequestParameters {
+typedef struct OmiRequestParameters {
     OmiRequestType requestType;
     eomi_time arrival;
     eomi_time deadline;
     OmiVersion version;
     OmiPayloadFormat format;
-};
-typedef struct OmiRequestParameters OmiRequestParameters;
+    float interval;
+    char* callbackAddr;
+} OmiRequestParameters;
+
+//#define OmiRequestParameters_INITIALIZER {.requestType=OmiInvalid, .arrival=}
 
 #define StringData(str, hash) \
     static const char* s_ ## str = #str; \
@@ -60,5 +64,27 @@ NamedStringData(xmlnsOmi1, "omi.xsd", 2350025953)
 NamedStringData(xmlnsOdf2, "http://www.opengroup.org/xsd/odf/2.0/", 177890333)
 NamedStringData(v1, "1.0", 3946978290)
 NamedStringData(v2, "2.0", 673058499)
+
+StringData(msgformat, 442031329)
+StringData(interval, 3470624120)
+StringData(callback, 2280666118)
+StringData(odf, 2873137720)
+StringData(result, 171406884)
+StringData(return, 2246981567)
+StringData(msg, 3766509314)
+StringData(requestID, 1450582271)
+StringData(returnCode, 1808323374)
+StringData(description, 879704937)
+
+StringData(Objects, 136869387)
+StringData(Object, 3851314394)
+StringData(id, 926444256)
+StringData(InfoItem, 2589257766)
+StringData(name, 2369371622)
+StringData(type, 1361572173)
+StringData(MetaData, 891574848)
+StringData(value, 1113510858)
+StringData(unixTime, 3907425434)
+StringData(dateTime, 1293334960)
 
 #endif

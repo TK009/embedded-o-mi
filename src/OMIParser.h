@@ -4,6 +4,7 @@
 #include "OMI.h"
 #include "yxml.h"
 #include "utils.h"
+#include "ODFTree.h"
 
 #include <string.h> //memset
 
@@ -16,7 +17,7 @@
 #endif
 
 #ifndef ParserMaxStringLength
-#define ParserMaxStringLength 128
+#define ParserMaxStringLength 256
 #endif
 
 #ifndef XmlParserBufferSize
@@ -33,25 +34,34 @@ typedef enum OmiParserState {
     //OmiState_PreVerb,           // after omeEnvelope open tag, before request verb "<omiEnvelope>_<"
     //OmiState_VerbAttr,          // inside omi request verb
     OmiState_Verb,          // inside omi request verb
-    OmiState_PreMsg,
+    OmiState_Response,
+    OmiState_Result,
+    OmiState_RequestID,
+    OmiState_Return,
     OmiState_Msg,
-} OmiParserState;
-
-typedef enum OdfParserState {
-    OdfState_Ready = 0,
-    OdfState_PreObjects,
-    OdfState_ObjectsAttr,
-    OdfState_PreObject,
-    OdfState_ObjectAttr,
-    OdfState_PreId,
+    OdfState_Objects,
+    OdfState_Object,
     OdfState_Id,
     OdfState_ObjectChildren,
-    OdfState_InfoItemAttr,
-    OdfState_InfoItemChildren,
-    OdfState_InfoItemMeta,
-    OdfState_ValueAttrs,
+    OdfState_InfoItem,
+    OdfState_Description,
+    OdfState_MetaData,
     OdfState_Value,
-} OdfParserState;
+} OmiParserState;
+
+typedef enum ErrorResponse {
+    Err_OK = 0,
+    Err_NonMatchingCloseTag = YXML_ECLOSE,
+    Err_StackOverflow = YXML_ESTACK,
+    Err_XmlError = YXML_ESYN,
+    Err_InvalidCharRef = YXML_EREF,
+    Err_InvalidElement,
+    Err_InvalidDataFormat,
+    Err_InvalidAttribute,
+    Err_InternalError,
+    Err_OOM_String,
+    Err_OOM,
+} ErrorResponse;
 
 typedef enum OdfElementType {
     OdfObject,
@@ -60,22 +70,34 @@ typedef enum OdfElementType {
     OdfType
 } OdfElementType;
 
+typedef struct OmiParser OmiParser;
+typedef char* (*StringCallback)(OmiParser *); // store p->tempString
+typedef int (*OdfPathCallback)(OmiParser *, Path);
+typedef void (*ResponseCallback)(char *content);
+
 struct OmiParser {
     uchar connectionId;
     uint bytesRead;
     uint stPosition; // tells the position in current state, used for comparison of tag names etc.
-    PartialHash stHash; // hash state to construct hash for comparison of tag and attribute names
+    uint tempStringLength;
+    // functions
+    StringCallback stringCallback;
+    OdfPathCallback odfCallback;
+    //ResponseCallback responseCallback; // not used in parser, but can be used in other callbacks
+
+    
+    PartialHash stHash; // hash state to construct hash for comparison of text content and attribute values
     OmiParserState st;
     OmiRequestParameters parameters;
-    char stringLength[ParserMaxStringLength];
     yxml_t xmlSt;
+    char tempString[ParserMaxStringLength];
     char xmlBuffer[XmlParserBufferSize];
 };
-typedef struct OmiParser OmiParser;
+OmiParser* OmiParser_init(OmiParser* p, uchar connectionId);
 
 struct OdfParser {
     OdfElementType stack[16];
-    OdfParserState st;
+    //OdfParserState st;
 };
 typedef struct OdfParser OdfParser;
 
@@ -88,7 +110,7 @@ typedef struct OdfParser OdfParser;
 //  void * parameter;
 //} ParserSource;
 
-OmiParser* initParser(uchar connectionId);
+OmiParser* getParser(uchar connectionId);
 int runParser(OmiParser * p, char * inputChunk);
 yxml_ret_t runXmlParser(OmiParser * p, char ** inputChunkP, uint maxBytes);
 

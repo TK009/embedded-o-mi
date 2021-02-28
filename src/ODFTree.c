@@ -5,17 +5,21 @@
 #include <string.h>
 
 
-void mkPath(Path* self, uchar depth, Path* parent, char * odfId) {
-    self->odfId = odfId;
-    self->parent = parent;
-    self->odfIdLength = strnlen(odfId, 0xFF);
+// TODO: Path_init( 
+Path* Path_init(Path* self, uchar depth, Path* parent, char * odfId) {
+    if (self) {
+        uint parentHash = parent? parent->hashCode : 0;
+        self->odfId = odfId;
+        self->parent = parent;
+        self->odfIdLength = (uchar) strnlen(odfId, 0xFF);
 
-    self->idHashCode = calcHashCodeL(odfId, self->odfIdLength);
+        self->idHashCode = calcHashCodeL(odfId, self->odfIdLength);
 
-    uint parentHash = parent? parent->hashCode : 0;
-    self->hashCode = self->idHashCode ^ parentHash;
+        self->hashCode = self->idHashCode ^ parentHash;
 
-    self->depth = depth;
+        self->depth = depth;
+    }
+    return self;
 }
 
 // return id
@@ -94,12 +98,13 @@ Path* addPath(ODFTree* tree, const char pathString[]) {
             strhash idHash = calcHashCodeL(idStart, segmentLength);
             strhash parentHash = parent? parent->hashCode : 0;
             Path newSegment = {
-                idStart,
-                parent,
-                idHash,
-                idHash ^ parentHash,
-                depth,
-                (uchar) segmentLength
+                .depth = depth,
+                .odfIdLength = (uchar) segmentLength,
+                .odfId = idStart,
+                .parent = parent,
+                .idHashCode = idHash,
+                .hashCode = idHash ^ parentHash,
+                .flags = 0
             };
 
             int segmentIx = 0;

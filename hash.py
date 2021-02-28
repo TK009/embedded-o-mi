@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import sys
 h = 2166136261
 for x in sys.argv[1]:

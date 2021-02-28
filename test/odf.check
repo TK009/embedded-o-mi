@@ -5,18 +5,18 @@
 
 #test pathCompareT
     Path Objects;
-    mkPath( &Objects, 1, 0, "Objects" );
+    Path_init( &Objects, 1, 0, "Objects" );
     Path MyObject;  // Objects/MyObject
-    mkPath( &MyObject, 2, &Objects, "MyObject" );
+    Path_init( &MyObject, 2, &Objects, "MyObject" );
     Path MyItem;  // Objects/MyObject/MyItem
-    mkPath( &MyItem, 3, &MyObject, "MyItem" );
+    Path_init( &MyItem, 3, &MyObject, "MyItem" );
     Path MyItem2;  // Objects/MyObject/MyItem2
-    mkPath( &MyItem2, 3, &MyObject, "MyItem2" );
+    Path_init( &MyItem2, 3, &MyObject, "MyItem2" );
 
     Path MyObject2;  // Objects/MyObjecu
-    mkPath( &MyObject2, 2, &Objects, "MyObjecu" );
+    Path_init( &MyObject2, 2, &Objects, "MyObjecu" );
     Path MyItem3; // Objects/MyObjecu/MyItem
-    mkPath( &MyItem3, 3, &MyObject2, "MyItem3" );
+    Path_init( &MyItem3, 3, &MyObject2, "MyItem3" );
 
 
     // Equals

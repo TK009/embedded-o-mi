@@ -3,6 +3,8 @@
 
 #include <stdlib.h> // size_t
 
+# define packed __attribute__((packed))
+
 typedef signed char schar;
 typedef unsigned char uchar;
 typedef unsigned int uint;

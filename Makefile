@@ -133,7 +133,7 @@ $(OBJDIR)/%.log: $(OBJDIR)/%.test
 test: $(TESTRESULTS)
 	@echo
 	@llvm-profdata merge -sparse $(TESTDATA) -o $(OBJDIR)/default.profdata
-	@llvm-cov report -instr-profile=$(OBJDIR)/default.profdata $(OBJDIR)/odf.test $(addprefix "-object=", $(TESTBINARIES))
+	@llvm-cov report -use-color -instr-profile=$(OBJDIR)/default.profdata $(OBJDIR)/odf.test $(addprefix "-object=", $(TESTBINARIES)) | sed 's/-----------------------------------------//'
 
 coverage:
 	@llvm-cov show $(TESTBINARIES) -instr-profile ./obj/default.profdata
