@@ -24,6 +24,10 @@
 #define XmlParserBufferSize 512
 #endif
 
+#ifndef OdfDepthLimit
+#define OdfDepthLimit 15
+#endif
+
 // Something like finite state machine here
 
 typedef enum OmiParserState {
@@ -42,19 +46,22 @@ typedef enum OmiParserState {
     OdfState_Objects,
     OdfState_Object,
     OdfState_Id,
-    OdfState_ObjectChildren,
+    OdfState_ObjectObjects,
+    OdfState_ObjectInfoItems,
     OdfState_InfoItem,
     OdfState_Description,
     OdfState_MetaData,
     OdfState_Value,
+    OdfState_End,
 } OmiParserState;
 
 typedef enum ErrorResponse {
-    Err_OK = 0,
     Err_NonMatchingCloseTag = YXML_ECLOSE,
     Err_StackOverflow = YXML_ESTACK,
     Err_XmlError = YXML_ESYN,
     Err_InvalidCharRef = YXML_EREF,
+    Err_OK = 0,
+    Err_End,
     Err_InvalidElement,
     Err_InvalidDataFormat,
     Err_InvalidAttribute,
@@ -63,17 +70,18 @@ typedef enum ErrorResponse {
     Err_OOM,
 } ErrorResponse;
 
-typedef enum OdfElementType {
+typedef enum OdfParserEvent {
     OdfObject,
     OdfInfoItem,
     OdfMetaData,
-    OdfType
-} OdfElementType;
+    OdfType,
+    OdfValue,
+} OdfParserEvent;
 
 typedef struct OmiParser OmiParser;
-typedef char* (*StringCallback)(OmiParser *); // store p->tempString
-typedef int (*OdfPathCallback)(OmiParser *, Path);
-typedef void (*ResponseCallback)(char *content);
+typedef char* (*StringCallback)(OmiParser *); // Store p->tempString
+typedef int (*OdfPathCallback)(OmiParser *, Path); // Called at every o-df path level
+typedef void (*ResponseCallback)(char *content); // Send
 
 struct OmiParser {
     uchar connectionId;
@@ -83,8 +91,9 @@ struct OmiParser {
     // functions
     StringCallback stringCallback;
     OdfPathCallback odfCallback;
+    Path* currentOdfPath;
+    Path pathStack[OdfDepthLimit]; // for odfCallback
     //ResponseCallback responseCallback; // not used in parser, but can be used in other callbacks
-
     
     PartialHash stHash; // hash state to construct hash for comparison of text content and attribute values
     OmiParserState st;
@@ -95,11 +104,15 @@ struct OmiParser {
 };
 OmiParser* OmiParser_init(OmiParser* p, uchar connectionId);
 
-struct OdfParser {
-    OdfElementType stack[16];
-    //OdfParserState st;
-};
-typedef struct OdfParser OdfParser;
+// Return true on success, false on failure
+bool omiParser_pushPath(OmiParser* p, OdfId id, PathFlags flags);
+Path* omiParser_popPath(OmiParser* p);
+
+//struct OdfParser {
+//    OdfElementType stack[16];
+//    //OdfParserState st;
+//};
+//typedef struct OdfParser OdfParser;
 
 
 //// Parser input character pull function with any pointer parameter, parameter is saved to parser state

@@ -19,17 +19,20 @@ static char* storeTempString(OmiParser *p) {
 
 OmiParser* OmiParser_init(OmiParser* p, uchar connectionId) {
     if (p) {
+        memset(&p->pathStack, 0, sizeof(p->pathStack));
+        Path_init(&(p->pathStack[0]), 1, NULL, s_Objects, 0);
         *p = (OmiParser){
             .connectionId = connectionId, // use same as i?
             .bytesRead = 0,
             .stPosition = 0,
             .tempStringLength = 0,
             .stringCallback = (StringCallback) storeTempString, // TODO: change to string storage
-            //.odfCallback = odfHandler
+            .odfCallback = NULL, //odfHandler
             .stHash = {0},
             .st = OmiState_PreOmiEnvelope,
             //.parameters = OmiRequestParameters_INITIALIZER(arrival
-            .tempString = ""
+            .tempString = "",
+            .currentOdfPath = &p->pathStack[0]
             };
         memset(&p->parameters, 0, sizeof(p->parameters));
         p->parameters.arrival = getTimestamp();
@@ -46,6 +49,23 @@ OmiParser* getParser(uchar connectionId) {
     }
     // TODO: parse ttls of requests and check if any expired to make room for the new
     return NULL;
+}
+
+
+bool omiParser_pushPath(OmiParser* p, OdfId id, PathFlags flags) {
+    int depth = p->currentOdfPath->depth;
+    if (depth >= OdfDepthLimit) return false;
+
+    // FIXME: alloc id!
+    Path* newPath = Path_init(p->currentOdfPath+1, depth+1, p->currentOdfPath, id, flags);
+    p->currentOdfPath = newPath;
+    return true;
+}
+Path* omiParser_popPath(OmiParser* p){
+    Path* old = p->currentOdfPath;
+    // FIXME: free id!
+    p->currentOdfPath = p->currentOdfPath - 1;
+    return old;
 }
 
 
@@ -132,8 +152,10 @@ static inline int processVerb(OmiParser *p, yxml_ret_t r) {
                     else return Err_InvalidDataFormat;
                 case h_interval:
                     switch (p->parameters.requestType) {
-                        case OmiRead: p->parameters.requestType = OmiSubscribe;
-                        case OmiSubscribe: break;
+                        case OmiRead:
+                            p->parameters.requestType = OmiSubscribe; break;
+                        case OmiSubscribe: 
+                            break; // FIXME
                         default: return Err_InvalidAttribute; // interval can only be used with read to create a subscription.
                     }
                     p->parameters.deadline = parseFloat(p->tempString); // NOTE time unit?; full seconds or ms?
@@ -178,9 +200,10 @@ static inline int processReturn(OmiParser *p, yxml_ret_t r){
             switch (calcHashCode(p->xmlSt.attr)) {
                 case h_returnCode:
 
-                case h_description:
+                case h_description: // TODO: debug log?
                 default: break;
             }
+            break;
         case YXML_ELEMSTART:
             switch (calcHashCode(p->xmlSt.elem)) {
                 case h_requestID:
@@ -203,7 +226,7 @@ static inline int processRequestID(OmiParser *p, yxml_ret_t r){
             break;
         case YXML_ELEMEND:
             if (p->parameters.requestType == OmiResponse)
-                p->st = OmiState_Result;
+                p->st = OmiState_Return;
             else
                 p->st = OmiState_Verb;
             break;
@@ -253,13 +276,17 @@ static inline int processObject(OmiParser *p, yxml_ret_t r){
     return 0;
 }
 static inline int processId(OmiParser *p, yxml_ret_t r){
+    const char * id;
     switch (r) {
         case YXML_CONTENT:
             dataToTempString(p);
             break;
         case YXML_ELEMEND:
-            // TODO: Save object id; needed for children
-            p->st = OdfState_ObjectChildren;
+            id = p->stringCallback(p);
+            omiParser_pushPath(p, id, 0);
+            // FIXME: maybe not here ?: odfCallback(p->currentOdfPath);
+
+            p->st = OdfState_ObjectInfoItems;
             break;
         case YXML_ELEMSTART: // not allowed
             return Err_InvalidElement;
@@ -267,7 +294,7 @@ static inline int processId(OmiParser *p, yxml_ret_t r){
     }
     return 0;
 }
-static inline int processObjectChildren(OmiParser *p, yxml_ret_t r){
+static inline int processObjectInfoItems(OmiParser *p, yxml_ret_t r){
     switch (r) {
         case YXML_ELEMSTART:
             switch (calcHashCode(p->xmlSt.elem)) {
@@ -277,11 +304,36 @@ static inline int processObjectChildren(OmiParser *p, yxml_ret_t r){
                 case h_InfoItem:
                     p->st = OdfState_InfoItem;
                     break;
-                case h_Object: // Technically should be after all InfoItems
-                    p->st = OdfState_InfoItem;
+                case h_Object: // Technically should only be after all InfoItems, but now allowed also before
+                    p->st = OdfState_Object;
                     break;
                 default:
                     return Err_InvalidElement;
+            }
+            break;
+        case YXML_ELEMEND:
+            if (elementEquals(Object)) {
+                omiParser_popPath(p);
+                if (p->currentOdfPath->depth <= 1)
+                    p->st = OdfState_End;
+                else
+                    p->st = OdfState_ObjectObjects;
+            }
+            break;
+        default: break;
+    }
+    return 0;
+}
+static inline int processObjectObjects(OmiParser *p, yxml_ret_t r){
+    switch (r) {
+        case YXML_ELEMSTART:
+            requireTag(Object, OdfState_Object);
+            break;
+        case YXML_ELEMEND:
+            if (p->currentOdfPath->depth == 1){
+                p->st = OdfState_End;
+            } else {
+                omiParser_popPath(p);
             }
         default: break;
     }
@@ -294,10 +346,11 @@ static inline int processDescription(OmiParser *p, yxml_ret_t r){
             break;
         case YXML_ELEMEND:
             // TODO: Save description
-            // if (inside object)
-            p->st = OdfState_ObjectChildren;
-            // else if (inside infoitem)
-            // p->st = OdfState_InfoItem;
+
+            if (p->currentOdfPath->parent->flags & PF_IsInfoItem)
+                p->st = OdfState_InfoItem;
+            else // if (inside object)
+                p->st = OdfState_ObjectInfoItems;
             break;
         case YXML_ELEMSTART: // not allowed
             return Err_InvalidElement;
@@ -315,7 +368,8 @@ static inline int processInfoItem(OmiParser *p, yxml_ret_t r){
             break;
         case YXML_ATTREND:
             switch (calcHashCode(p->xmlSt.attr)) {
-                case h_name: // TODO: Save InfoItem "name" attribute
+                case h_name:
+                    omiParser_pushPath(p, p->tempString, PF_IsInfoItem);
                     break; 
                 case h_type: // TODO: Save InfoItem "type" attribute
                     break;
@@ -328,17 +382,18 @@ static inline int processInfoItem(OmiParser *p, yxml_ret_t r){
                     break;
                 case h_MetaData:
                     p->st = OdfState_MetaData;
+                    omiParser_pushPath(p, s_MetaData, PF_IsMetaData);
                     break;
                 case h_value:
                     p->st = OdfState_Value;
             }
             break;
         case YXML_ELEMEND:
-            // TODO: Empty InfoItem (no values)
-            // if (inside Object)
-            p->st = OdfState_ObjectChildren;
-            // else if (inside MetaData)
-            // p->st = OdfState_MetaData;
+            omiParser_popPath(p);
+            if (p->currentOdfPath->parent->flags & PF_IsMetaData)
+                p->st = OdfState_MetaData;
+            else //if (inside Object)
+                p->st = OdfState_ObjectInfoItems;
             break;
         default: break;
     }
@@ -351,6 +406,7 @@ static inline int processMetaData(OmiParser *p, yxml_ret_t r){
             requireTag(InfoItem, OdfState_InfoItem);
             break;
         case YXML_ELEMEND:
+            omiParser_popPath(p);
             p->st = OdfState_InfoItem;
             break;
         case YXML_ATTRSTART:
@@ -384,12 +440,12 @@ static inline int processValue(OmiParser *p, yxml_ret_t r){
             dataToTempString(p);
             break;
         case YXML_ELEMSTART:
-            if (!elementEquals(value)) {
+            if (!elementEquals(value)) { // FIXME: Error?
                 return Err_InvalidElement;
             }
             break;
         case YXML_ELEMEND:
-            // TODO: store value
+            // FIXME: store value, call odfCallback
             // p->tempString
             p->st = OdfState_InfoItem;
             break;
@@ -460,8 +516,10 @@ ErrorResponse runParser(OmiParser * p, char * inputChunk) {
                 StateMachineHandler(processObject);
             case OdfState_Id:
                 StateMachineHandler(processId);
-            case OdfState_ObjectChildren:
-                StateMachineHandler(processObjectChildren);
+            case OdfState_ObjectObjects:
+                StateMachineHandler(processObjectObjects);
+            case OdfState_ObjectInfoItems:
+                StateMachineHandler(processObjectInfoItems);
             case OdfState_InfoItem:
                 StateMachineHandler(processInfoItem);
             case OdfState_Description:
@@ -470,6 +528,13 @@ ErrorResponse runParser(OmiParser * p, char * inputChunk) {
                 StateMachineHandler(processMetaData);
             case OdfState_Value:
                 StateMachineHandler(processValue);
+            case OdfState_End:
+                if (r == YXML_ELEMEND && elementEquals(omiEnvelope)) {
+                    yxml_ret_t r = yxml_eof(&p->xmlSt);
+                    if (r < 0) return r;
+                    else return Err_End;
+                }
+                if (r == YXML_ELEMSTART) return Err_InvalidElement;
         }
     }
     return 0; // TODO: ?

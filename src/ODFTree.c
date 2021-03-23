@@ -6,7 +6,7 @@
 
 
 // TODO: Path_init( 
-Path* Path_init(Path* self, uchar depth, Path* parent, char * odfId) {
+Path* Path_init(Path* self, uchar depth, Path* parent, OdfId odfId, PathFlags flags) {
     if (self) {
         uint parentHash = parent? parent->hashCode : 0;
         self->odfId = odfId;
@@ -18,6 +18,7 @@ Path* Path_init(Path* self, uchar depth, Path* parent, char * odfId) {
         self->hashCode = self->idHashCode ^ parentHash;
 
         self->depth = depth;
+        self->flags = flags;
     }
     return self;
 }
