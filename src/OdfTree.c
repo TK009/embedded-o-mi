@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
-#include "ODFTree.h"
+#include "OdfTree.h"
 #include "utils.h"
 #include <math.h>
 #include <string.h>
@@ -9,22 +9,28 @@
 Path* Path_init(Path* self, uchar depth, Path* parent, OdfId odfId, PathFlags flags) {
     if (self) {
         uint parentHash = parent? parent->hashCode : 0;
-        self->odfId = odfId;
-        self->parent = parent;
-        self->odfIdLength = (uchar) strnlen(odfId, 0xFF);
-
-        self->idHashCode = calcHashCodeL(odfId, self->odfIdLength);
-
-        self->hashCode = self->idHashCode ^ parentHash;
-
-        self->depth = depth;
-        self->flags = flags;
+        uchar odfIdLength = (uchar) strnlen(odfId, 0xFF);
+        strhash idHashCode = calcHashCodeL(odfId, odfIdLength);
+        *self = (Path){
+            .odfId = odfId,
+            .parent = parent,
+            .odfIdLength = odfIdLength,
+            .idHashCode = idHashCode,
+            .hashCode = idHashCode ^ parentHash,
+            .depth = depth,
+            .flags = flags
+        };
     }
     return self;
 }
 
+OdfTree* OdfTree_init(OdfTree* self) {
+    if (self) self->size = 0;
+    return self;
+}
+
 // return id
-//int _binarySearch(ODFTree * tree, Path needle, int left, int right) {
+//int _binarySearch(OdfTree * tree, Path needle, int left, int right) {
 //    int middle = (left + right) / 2; // left biased
 //    
 //    if (middle == left) return -1;
@@ -49,7 +55,7 @@ schar pathCompare(const Path *a, const Path *b) {
 
 // returns true if found, false if not found. `result` contains index of found
 // or the index of the next closest element.
-int odfBinarySearch(const ODFTree* tree, const Path* needle, int* result) {
+int odfBinarySearch(const OdfTree* tree, const Path* needle, int* result) {
     return binarySearch(
             tree->sortedPaths,
             needle,
@@ -59,14 +65,14 @@ int odfBinarySearch(const ODFTree* tree, const Path* needle, int* result) {
             result);
 }
 
-//int getPath(ODFTree tree, Path needle) {
+//int getPath(OdfTree tree, Path needle) {
 //    binarySearch()
 //    return 0;
 //}
 
 
 // Move array forward one step starting from given index
-void _move(ODFTree* tree, int index) {
+void _move(OdfTree* tree, int index) {
     //memmove(tree->sortedPaths+1, tree->sortedPaths, (tree->size - index) * sizeof(Path));
 
     Path * indexPointer = tree->sortedPaths + index;
@@ -79,22 +85,21 @@ void _move(ODFTree* tree, int index) {
     }
 }
 
-Path* addPath(ODFTree* tree, const char pathString[]) {
+Path* addPath(OdfTree* tree, const char pathString[]) {
     const char* idStart = pathString;
     Path* parent = NULL;
 
     uchar depth = 1;
-    int segmentLength = 0;
     
 
     for (const char* current = pathString; *current != '\0';) {
         ++current; // increase at beginning instead of end
-        ++segmentLength;
 
         // Detect the end of segment
         if (*current == '/' || *current == '\0') {
             //*current = '\0'; // odfId ending handled by odfIdLength instead
 
+            int segmentLength = current - idStart;
             // calc hash and collect variables for searching
             strhash idHash = calcHashCodeL(idStart, segmentLength);
             strhash parentHash = parent? parent->hashCode : 0;
@@ -125,7 +130,6 @@ Path* addPath(ODFTree* tree, const char pathString[]) {
             // local vars
             idStart = current + 1;
             parent = &tree->sortedPaths[segmentIx];
-            segmentLength = -1;
             ++depth;
         }
     }

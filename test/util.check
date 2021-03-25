@@ -81,3 +81,14 @@
     ck_assert_int_eq(HString_compare(&strB, &strA), 1);
     ck_assert_int_eq(HString_compare(&liquid, &costarring), strcmp("liquid", "costarring"));
 
+#test OStringT
+    OString str;
+    OString_init(&str, "test");
+    ck_assert_int_eq(OString_len(&str), 4);
+    ck_assert_int_eq(str.length, 4);
+    ck_assert_int_eq(str.flags, OS_hasLen);
+    strhash expectedHash = calcHashCode("test");
+    ck_assert_uint_eq(expectedHash, OString_hash(&str));
+    ck_assert_uint_eq(expectedHash, str.hash);
+    ck_assert_int_eq(str.flags, OS_hasLen | OS_hasHash);
+    ck_assert_uint_eq(expectedHash, OString_hash(&str));

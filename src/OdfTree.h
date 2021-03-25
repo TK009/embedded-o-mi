@@ -10,12 +10,12 @@ typedef uint PathFlags;
 // General idea is to build a prefix tree for O-DF
 // ...in other words, linked list of each Path sharing same elements
 struct Path {
+    uchar depth; // Objects: 1 FIXME: moving to top breaks test (error?)
+    uchar odfIdLength;
     OdfId odfId;
     struct Path* parent;
     uint idHashCode;
     uint hashCode;
-    uchar depth; // Objects: 1 FIXME: moving to top breaks test (error?)
-    uchar odfIdLength;
     PathFlags flags;
 };
 typedef struct Path Path;
@@ -27,16 +27,16 @@ schar pathCompare(const Path* a, const Path* b);
 //Path mkPath(char* pathString);
 
 
-struct ODFTree {
+typedef struct OdfTree {
     Path sortedPaths[ODFTREE_SIZE];
     int size;
-};
+} OdfTree;
 
-typedef struct ODFTree ODFTree;
+OdfTree* OdfTree_init(OdfTree* self);
 
-int odfBinarySearch(const ODFTree* tree, const Path* needle, int* resultIndex);
+int odfBinarySearch(const OdfTree* tree, const Path* needle, int* resultIndex);
 
-Path* addPath(ODFTree* tree, const char newPath[]);
+Path* addPath(OdfTree* tree, const char newPath[]);
 
 typedef enum ValueType {
     V_Int = 0,

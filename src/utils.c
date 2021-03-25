@@ -92,4 +92,20 @@ schar HString_compare(const HString *a, const HString *b) {
     return (a->hash < b->hash)? -1 : ((a->hash > b->hash)? 1 : strcmp(a->value, b->value));
 }
 
+OString * OString_init(OString* self, char * string){
+    if (self) *self = (OString){string, 0, 0, 0};
+    return self;
+}
+strhash OString_hash(OString* self){
+    if (self->flags & OS_hasHash) return self->hash;
+    self->hash = calcHashCodeL(self->data, OString_len(self));
+    self->flags |= OS_hasHash;
+    return self->hash;
+}
+strhash OString_len(OString* self){
+    if (self->flags & OS_hasLen) return self->length;
+    self->length = strlen(self->data);
+    self->flags |= OS_hasLen;
+    return self->length;
+}
 

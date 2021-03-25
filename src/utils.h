@@ -16,6 +16,7 @@ eomi_time getTimestamp();
 
 int stringLen(const char * string);
 
+
 #define FNV_prime 16777619
 #define FNV_offset_basis 2166136261
 
@@ -104,16 +105,37 @@ static const Allocator stdAllocator = {malloc, calloc, realloc, free};
 //#define ALLOC_INIT(alloc, type, ...)   \
 //    (type *)memdup(alloc(sizeof(type)), (type[]){ __VA_ARGS__  }, sizeof(type))
 
+// String with guaranteed hash
 typedef struct HString{
     char* value;
     strhash hash;
 } HString;
 HString* HString_init(HString* hs, char* str);
+// Hash u.integer ordering, not lexicographical order
 schar HString_compare(const HString *a, const HString *b);
 
 typedef struct Pair {
     void* fst;
     void* snd;
 } Pair;
+
+
+typedef enum OStringFlags {
+    OS_hasLen = 1,
+    OS_hasHash = 2,
+    OS_isStatic = 4
+} OStringFlags;
+
+// String which has lazy length and lazy hash value stored (lazy=calculated when first needed)
+typedef struct OString {
+    char * data;
+    OStringFlags flags;
+    ushort length;
+    strhash hash;
+} OString;
+
+OString * OString_init(OString* self, char * string);
+strhash OString_hash(OString* self);
+strhash OString_len(OString* self);
 
 #endif

@@ -1,22 +1,22 @@
 // vim: syntax=c
-#include "ODFTree.h"
+#include "OdfTree.h"
 
 #suite odf
 
 #test pathCompareT
     Path Objects;
-    Path_init( &Objects, 1, 0, "Objects" );
+    Path_init( &Objects, 1, 0, "Objects", 0 );
     Path MyObject;  // Objects/MyObject
-    Path_init( &MyObject, 2, &Objects, "MyObject" );
+    Path_init( &MyObject, 2, &Objects, "MyObject", 0 );
     Path MyItem;  // Objects/MyObject/MyItem
-    Path_init( &MyItem, 3, &MyObject, "MyItem" );
+    Path_init( &MyItem, 3, &MyObject, "MyItem", PF_IsInfoItem );
     Path MyItem2;  // Objects/MyObject/MyItem2
-    Path_init( &MyItem2, 3, &MyObject, "MyItem2" );
+    Path_init( &MyItem2, 3, &MyObject, "MyItem2", PF_IsInfoItem );
 
     Path MyObject2;  // Objects/MyObjecu
-    Path_init( &MyObject2, 2, &Objects, "MyObjecu" );
+    Path_init( &MyObject2, 2, &Objects, "MyObjecu", 0 );
     Path MyItem3; // Objects/MyObjecu/MyItem
-    Path_init( &MyItem3, 3, &MyObject2, "MyItem3" );
+    Path_init( &MyItem3, 3, &MyObject2, "MyItem3", PF_IsInfoItem );
 
 
     // Equals
@@ -74,7 +74,8 @@
 
 
 #test addPathT
-    ODFTree odf = {};
+    OdfTree odf;
+    OdfTree_init(&odf);
 
     ck_assert_int_eq(odf.size, 0);
     
@@ -147,4 +148,14 @@
     ck_assert_ptr_eq(p2.parent, odf.sortedPaths+1); // AnObj/MyInfoItem
     ck_assert_ptr_eq(p3.parent, odf.sortedPaths+0); // Objects/MyObject
     ck_assert_ptr_eq(p4.parent, odf.sortedPaths+3); // MyObject/MyInfoItem
+
+#test memoryOffsetProblemT
+    char* expectedPath = "Objects/Object1/description";
+    OdfTree odf; char p1[50];
+    OdfTree_init(&odf);
+    Path * expected = addPath(&odf, expectedPath);
+    memcpy(p1, expected->odfId, expected->odfIdLength);
+    p1[expected->odfIdLength] = '\0';
+    ck_assert_str_eq(p1, "description");
+    
 

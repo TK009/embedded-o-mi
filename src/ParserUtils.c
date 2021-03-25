@@ -11,7 +11,7 @@ inline float parseFloat(char* str) {
 }
 
 // FIXME: error handling
-inline int parseInt(char* str) {
-    return atoi(str);
-}
+//inline int parseInt(char* str) {
+//    return atoi(str);
+//}
 

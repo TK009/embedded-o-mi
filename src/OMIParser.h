@@ -4,7 +4,7 @@
 #include "OMI.h"
 #include "yxml.h"
 #include "utils.h"
-#include "ODFTree.h"
+#include "OdfTree.h"
 
 #include <string.h> //memset
 
@@ -57,30 +57,40 @@ typedef enum OmiParserState {
 
 typedef enum ErrorResponse {
     Err_NonMatchingCloseTag = YXML_ECLOSE,
-    Err_StackOverflow = YXML_ESTACK,
-    Err_XmlError = YXML_ESYN,
-    Err_InvalidCharRef = YXML_EREF,
-    Err_OK = 0,
-    Err_End,
-    Err_InvalidElement,
-    Err_InvalidDataFormat,
-    Err_InvalidAttribute,
-    Err_InternalError,
-    Err_OOM_String,
-    Err_OOM,
+    Err_StackOverflow       = YXML_ESTACK,
+    Err_XmlError            = YXML_ESYN,
+    Err_InvalidCharRef      = YXML_EREF,
+    Err_OK                  = 0,
+    Err_End                 = 1,
+    Err_InvalidElement      = 2,
+    Err_InvalidDataFormat   = 3,
+    Err_InvalidAttribute    = 4,
+    Err_TooDeepOdf          = 5,
+    Err_InternalError       = 6,
+    Err_OOM_String          = 7,
+    Err_OOM                 = 8,
 } ErrorResponse;
 
-typedef enum OdfParserEvent {
-    OdfObject,
-    OdfInfoItem,
-    OdfMetaData,
-    OdfType,
-    OdfValue,
+typedef enum OdfParserEventType {
+    PE_Path,
+    PE_ValueUnixTime,
+    PE_ValueDateTime,
+    PE_ValueType,
+    PE_ValueData,
+} OdfParserEventType;
+
+typedef struct OdfParserEvent {
+    OdfParserEventType type;
+    char * data;
 } OdfParserEvent;
 
+#define OdfParserEvent(...) (OdfParserEvent){__VA_ARGS__}
+
 typedef struct OmiParser OmiParser;
-typedef char* (*StringCallback)(OmiParser *); // Store p->tempString
-typedef int (*OdfPathCallback)(OmiParser *, Path); // Called at every o-df path level
+// Allocate & Store a string (often p->tempString), length given as the last parameter
+typedef char* (*StringCallback)(OmiParser *, const char *, size_t);
+// Called at every o-df path level, return ErrorResponse. Should handle freeing of ParserEvent data
+typedef ErrorResponse (*OdfPathCallback)(OmiParser *, Path *, OdfParserEvent); 
 typedef void (*ResponseCallback)(char *content); // Send
 
 struct OmiParser {
@@ -103,10 +113,13 @@ struct OmiParser {
     char xmlBuffer[XmlParserBufferSize];
 };
 OmiParser* OmiParser_init(OmiParser* p, uchar connectionId);
+void OmiParser_destroy(OmiParser* p);
 
 // Return true on success, false on failure
-bool omiParser_pushPath(OmiParser* p, OdfId id, PathFlags flags);
-Path* omiParser_popPath(OmiParser* p);
+ErrorResponse OmiParser_pushPath(OmiParser* p, OdfId id, PathFlags flags);
+Path* OmiParser_popPath(OmiParser* p);
+
+char* storeTempString(OmiParser *p, const char * str, size_t stringLength);
 
 //struct OdfParser {
 //    OdfElementType stack[16];
@@ -124,7 +137,7 @@ Path* omiParser_popPath(OmiParser* p);
 //} ParserSource;
 
 OmiParser* getParser(uchar connectionId);
-int runParser(OmiParser * p, char * inputChunk);
+ErrorResponse runParser(OmiParser * p, char * inputChunk);
 yxml_ret_t runXmlParser(OmiParser * p, char ** inputChunkP, uint maxBytes);
 
 //StringStorage stringStorage;

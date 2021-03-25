@@ -1,9 +1,157 @@
 // vim: syntax=c
 #include "OMIParser.h"
 
+char * expectedPath = "";
+OdfParserEvent expectedEvent = {PE_Path, NULL};
+
+static ErrorResponse pathEventCb(OmiParser *parser, Path *path, OdfParserEvent actualEvent) {
+  ck_assert_int_eq(actualEvent.type, expectedEvent.type);
+  if (expectedEvent.data != NULL){
+    ck_assert_ptr_ne(actualEvent.data, NULL);
+    ck_assert_str_eq(actualEvent.data, expectedEvent.data);
+  }
+  OdfTree odf;
+  OdfTree_init(&odf);
+  const Path* targetPath = addPath(&odf, expectedPath);
+  ck_assert_uint_eq(targetPath->depth, path->depth);
+  //ck_assert_uint_eq(targetPath->parent->hashCode, path->parent->hashCode);
+  //ck_assert_mem_eq(targetPath->odfId, path->odfId, targetPath->odfIdLength);
+  for (int i = 0; i < odf.size; ++i) {
+    Path expected = odf.sortedPaths[i];
+    Path actualPath = parser->pathStack[i];
+    ck_assert_ptr_ne(actualPath.odfId, NULL); 
+    char expectedId[50]; char actualId[50];
+    memcpy(expectedId, expected.odfId, expected.odfIdLength);
+    memcpy(actualId, actualPath.odfId, actualPath.odfIdLength);
+    expectedId[expected.odfIdLength] = '\0';
+    actualId[actualPath.odfIdLength] = '\0';
+    ck_assert_uint_eq(expected.depth, actualPath.depth); 
+    //ck_assert_uint_eq(expected.odfIdLength, actualPath.odfIdLength); 
+    ck_assert_str_eq(expectedId, actualId);
+    ck_assert_uint_eq(expected.hashCode, actualPath.hashCode); 
+  }
+  free(actualEvent.data);
+  return Err_OK;
+}
+
 #suite OMIParser
 
-#test write
+#test parserUtilsT
+    //OmiParser p;
+    //OmiParser_init(0);
+    char * actual = storeTempString(NULL, "testing", 4);
+    ck_assert_str_eq(actual, "test");
+    free(actual);
+
+#test runXmlParserT
     OmiParser* p = getParser(0);
+    char * ptr;
+    ck_assert_ptr_ne(p, NULL);
+    char * test1 = "<testingtesting";
+    ptr = test1;
+    ck_assert_int_eq(runXmlParser(p, &ptr, 4), YXML_OK);
+    ck_assert_ptr_eq(test1 + 4, ptr);
+  
+    OmiParser_init(p, 0);
+    char * test2 = "<test>testing";
+    ptr = test2;
+    ck_assert_int_eq(runXmlParser(p, &ptr, 9), YXML_ELEMSTART);
+    ck_assert_ptr_eq(test2 + 6, ptr);
+
+    OmiParser_init(p, 0);
+    char * test3 = "<testingtesting";
+    ptr = test3;
+    ck_assert_int_eq(runXmlParser(p, &ptr, 20), YXML_OK);
+    ck_assert_int_eq(strlen(test3), ptr - test3);
+
+#define testState(inputStr, state)\
+    ck_assert_int_eq(runParser(p, inputStr), Err_OK);\
+    ck_assert_int_eq(p->st, state);
+
+#test writeRequestParsingT
+    OmiParser* p = getParser(0);
+    ck_assert_ptr_ne(p, NULL);
+    p->odfCallback = pathEventCb;
+    ck_assert_ptr_ne(p->pathStack[0].odfId, NULL); 
+    ck_assert_ptr_eq(&p->pathStack[0], p->currentOdfPath); 
+    ck_assert_int_eq(p->st, OmiState_PreOmiEnvelope);
+
+    testState("<?xml version=\"1.0\"?>\n", OmiState_PreOmiEnvelope);
+
+    testState("<omiEnvelope  xmlns=\"http://www.opengroup.org/xsd/omi/2.0/\"  version=\"2.0\" ttl=\"0.0\">\n ", OmiState_OmiEnvelope);
+    ck_assert_uint_eq(p->parameters.deadline, 36500u * 24 * 3600);
+    ck_assert_int_eq(p->parameters.version, OmiV2_ns);
+    
+    testState("<write msgformat=\"odf\" >\n ", OmiState_Verb);
+    ck_assert_int_eq(p->parameters.requestType, OmiWrite);
+    ck_assert_int_eq(p->parameters.format, OmiOdf);
+
+    testState("<msg>\n ", OmiState_Msg);
+    testState("<Objects version=\"2.0\" xmlns=\"http://www.opengroup.org/xsd/odf/2.0/\">\n ", OdfState_Objects);
+    testState(" <Object type=\"TypeOne\"> \n ", OdfState_Object);
+    
+    testState(" <id idType=\"TypeTwo\">Object1", OdfState_Id);
+    p->tempString[p->tempStringLength] = '\0';
+    ck_assert_str_eq(p->tempString, "Object1");
+
+    expectedPath = "Objects/Object1";
+    testState("</id> \n", OdfState_ObjectInfoItems);
+
+    expectedPath = "Objects/Object1/description";
+    expectedEvent = (OdfParserEvent){PE_Path, "Human readable description."};
+    testState("<description>Human readable description.", OdfState_Description);
+    testState("</description> \n", OdfState_ObjectInfoItems);
+
+    expectedPath = "Objects/Object1/Sensor1";
+    expectedEvent = (OdfParserEvent){PE_Path, NULL};
+    testState("<InfoItem name=\"Sensor1\" type=\"sometype\"> \n", OdfState_InfoItem);
+    ck_assert(p->currentOdfPath->flags & PF_IsInfoItem);
+
+    expectedPath = "Objects/Object1/Sensor1/description";
+    expectedEvent = (OdfParserEvent){PE_Path, "Human readable description."};
+    testState("<description>Human readable description.</description> \n", OdfState_InfoItem);
+    
+    expectedPath = "Objects/Object1/Sensor1/MetaData";
+    expectedEvent = (OdfParserEvent){PE_Path, NULL};
+    testState("<MetaData> \n", OdfState_MetaData);
+
+    expectedPath = "Objects/Object1/Sensor1/MetaData/MetaData1";
+    testState("<InfoItem name=\"MetaData1\"> \n", OdfState_InfoItem);
+
+    expectedEvent = (OdfParserEvent){PE_ValueDateTime, "2019-11-28T14:34:04.519+02:00"};
+    testState("<value dateTime=\"2019-11-28T14:34:04.519+02:00\"", OdfState_Value);
+
+    expectedEvent = (OdfParserEvent){PE_ValueType, "xs:integer"};
+    testState(" type=\"xs:integer\"", OdfState_Value);
+
+    expectedEvent = (OdfParserEvent){PE_ValueData, "420"};
+    testState(">420</value>", OdfState_InfoItem);
+
+    testState("</InfoItem> \n", OdfState_MetaData);
+    testState("</MetaData> \n", OdfState_InfoItem);
+    ck_assert_str_eq(p->currentOdfPath->odfId, "Sensor1");
+
+    expectedPath = "Objects/Object1/Sensor1";
+    expectedEvent = (OdfParserEvent){PE_ValueUnixTime, "42"};
+    testState("<value unixTime=\"42\">", OdfState_Value);
+
+    expectedEvent = (OdfParserEvent){PE_ValueData, "420"};
+    testState("420</value>", OdfState_InfoItem);
+
+    testState("</InfoItem> \n", OdfState_ObjectInfoItems);
+    ck_assert_str_eq(p->currentOdfPath->odfId, "Object1");
+    testState("</Object> \n", OdfState_ObjectObjects);
+    ck_assert_str_eq(p->currentOdfPath->odfId, "Objects");
+    testState("</Objects> \n", OdfState_End);
+
+    //runParser(p, "</msg> </write> </omiEnvelope>");
+    //ck_assert_int_eq(yxml_eof(&p->xmlSt), YXML_OK);
+    ck_assert_int_eq(runParser(p, "</msg> </write> </omiEnvelope>"), Err_End);
+    OmiParser_destroy(p);
+
+#test ParsingOtherBranchesT
+    OmiParser* p = getParser(0);
+    ck_assert_ptr_ne(p, NULL);
+
     
 
