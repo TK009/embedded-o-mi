@@ -72,6 +72,8 @@ $(OBJDIR)/%.check.c: $(TESTDIR)/%.check | $(OBJDIR)
 DEPDIR := $(OBJDIR)
 #.d
 
+COVERAGEDIR ?= $(OBJDIR)
+
 # always create dir?
 #$(shell mkdir -p $(DEPDIR) >/dev/null)
 
@@ -113,7 +115,7 @@ $(OBJDIR)/%.test: $(OBJDIR)/%.check.o $(OBJS)
 #	@$(CC) $(MYCFLAGS) -MM $< -MF $(OBJDIR)/$*.d # dependencies
 #	@sed -i '1s|^.*:|$@:|' $(OBJDIR)/$*.d # fix target path 
 
-.PHONEY: clean debug test coverageclean coverage
+.PHONEY: clean debug test coverageclean coverage coverage-html
 clean:
 	$(rm) -rf $(OBJDIR)
 	$(rm) default.profraw
@@ -134,12 +136,21 @@ test: $(TESTRESULTS)
 	@echo
 	@llvm-profdata merge -sparse $(TESTDATA) -o $(OBJDIR)/default.profdata
 	@llvm-cov report -use-color -instr-profile=$(OBJDIR)/default.profdata $(OBJDIR)/odf.test $(addprefix "-object=", $(TESTBINARIES)) | sed 's/-----------------------------------------//'
+	@echo
+	@echo "Some uncovered regions (search for 0 count lines if no red):"
+	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata "${SRCDIR}/$(shell ls -t ${SRCDIR} | head -1)" --use-color --show-expansions --show-line-counts-or-regions | egrep --color=never '(\[0;41m|   \^?0)' -C 3 | head -n 25 || true
 
 coverage:
-	@llvm-cov show $(TESTBINARIES) -instr-profile ./obj/default.profdata
+	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata
+
+coverage-html: ${COVERAGEDIR}
+	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata --format=html --show-expansions --output-dir=${COVERAGEDIR}
+	@echo Full coverage report: file://$(abspath ${COVERAGEDIR})/index.html
+
+#@xdg-open file://$(abspath ${COVERAGEDIR})/index.html
 
 coverageclean:
-	@rm -f $(OBJDIR)/*.prof{raw,data}
+	@rm -f $(OBJDIR)/*.prof{raw,data} ${COVERAGEDIR}
 
 .DELETE_ON_ERROR: %.o %.log
 

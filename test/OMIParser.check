@@ -34,17 +34,55 @@ static ErrorResponse pathEventCb(OmiParser *parser, Path *path, OdfParserEvent a
   return Err_OK;
 }
 
+static ErrorResponse noopPathCb(OmiParser *p, Path *a, OdfParserEvent b) {
+  (void) p, (void) a, (void) b;
+  if (b.data) free(b.data);
+  return Err_OK;
+}
+static char* failStringCallback(OmiParser *p, const char * str, size_t len) {
+  (void) p, (void) str, (void) len;
+  return NULL;
+}
+
+#define createParser(p) \
+    OmiParser p ## _allocation; \
+    OmiParser *p = &(p ## _allocation); \
+    OmiParser_init(p, 0); \
+    p->odfCallback = noopPathCb
+
+#define restartParser(p) \
+    OmiParser_destroy(p); \
+    OmiParser_init(p, 0); \
+    p->odfCallback = noopPathCb
+
 #suite OMIParser
 
 #test parserUtilsT
-    //OmiParser p;
-    //OmiParser_init(0);
     char * actual = storeTempString(NULL, "testing", 4);
     ck_assert_str_eq(actual, "test");
     free(actual);
 
+    OmiParser pa;
+    OmiParser *p = &pa;
+    OmiParser_init(p, 0);
+    p->stringCallback = failStringCallback;
+    p->odfCallback = noopPathCb;
+    p->st = OdfState_InfoItem;
+    ck_assert_int_eq(runParser(p, "<value unixTime=\"1\""), Err_OOM_String);
+    runParser(p, ">");
+    p->st = OmiState_OmiEnvelope;
+    ck_assert_int_eq(runParser(p, "<read callback=\"h\""), Err_OOM_String);
+    runParser(p, ">");
+    p->st = OmiState_Verb;
+    ck_assert_int_eq(runParser(p, "<requestID>1</requestID>"), Err_OOM_String);
+    p->st = OdfState_InfoItem;
+    ck_assert_int_eq(runParser(p, "<description>1</description>"), Err_OOM_String);
+    p->st = OdfState_InfoItem;
+    ck_assert_int_eq(runParser(p, "<value>1</value>"), Err_OOM_String);
+
+
 #test runXmlParserT
-    OmiParser* p = getParser(0);
+    createParser(p);
     char * ptr;
     ck_assert_ptr_ne(p, NULL);
     char * test1 = "<testingtesting";
@@ -68,9 +106,8 @@ static ErrorResponse pathEventCb(OmiParser *parser, Path *path, OdfParserEvent a
     ck_assert_int_eq(runParser(p, inputStr), Err_OK);\
     ck_assert_int_eq(p->st, state);
 
-#test writeRequestParsingT
-    OmiParser* p = getParser(0);
-    ck_assert_ptr_ne(p, NULL);
+#test writeRequestParsingStatesCallbacksT
+    createParser(p);
     p->odfCallback = pathEventCb;
     ck_assert_ptr_ne(p->pathStack[0].odfId, NULL); 
     ck_assert_ptr_eq(&p->pathStack[0], p->currentOdfPath); 
@@ -144,14 +181,144 @@ static ErrorResponse pathEventCb(OmiParser *parser, Path *path, OdfParserEvent a
     ck_assert_str_eq(p->currentOdfPath->odfId, "Objects");
     testState("</Objects> \n", OdfState_End);
 
-    //runParser(p, "</msg> </write> </omiEnvelope>");
-    //ck_assert_int_eq(yxml_eof(&p->xmlSt), YXML_OK);
     ck_assert_int_eq(runParser(p, "</msg> </write> </omiEnvelope>"), Err_End);
     OmiParser_destroy(p);
 
-#test ParsingOtherBranchesT
-    OmiParser* p = getParser(0);
-    ck_assert_ptr_ne(p, NULL);
+#test ParsingRequestTypesT
+    createParser(p);
+    p->st = OmiState_OmiEnvelope;
+    testState( "<read interval=\"-1\">", OmiState_Verb);
+    ck_assert_int_eq(p->parameters.interval, -1);
+    ck_assert_int_eq(p->parameters.requestType, OmiSubscribe);
 
+    p->st = OmiState_OmiEnvelope;
+    testState( "<cancel proprietary=\"1\">", OmiState_Verb);
+    ck_assert_int_eq(p->parameters.requestType, OmiCancel);
+    testState( "<requestID>2</requestID>", OmiState_Verb);
+
+    p->st = OmiState_OmiEnvelope;
+    testState( "<call callback=\"http://localhost\">", OmiState_Verb);
+    ck_assert_int_eq(p->parameters.requestType, OmiCall);
+    ck_assert_str_eq(p->parameters.callbackAddr, "http://localhost");
+
+    OmiParser_destroy(p);
+
+#test ParsingResponseT
+    createParser(p);
+
+    // Response
+    testState( "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/2.0/\" token=\"abc\" ttl=\"60.0\" version=\"2.0\">"
+               "  <response>", OmiState_Response);
+    ck_assert_int_lt(p->parameters.deadline, getTimestamp() + 120);
+    ck_assert_int_gt(p->parameters.deadline, getTimestamp() + 10);
+    testState( "    <result>", OmiState_Result);
+    testState( "      <return description=\"Successfully started subscription\" returnCode=\"200\"/>", OmiState_Return);
+    testState( "      <requestID>1", OmiState_RequestID);
+    testState( "</requestID> ", OmiState_Return);
+    testState( "</result> ", OmiState_Response);
+    testState( "</response> ", OdfState_End);
+    ck_assert_int_eq(runParser(p, " </omiEnvelope>"), Err_End);
+
+    restartParser(p);
+    p->st = OmiState_OmiEnvelope;
+    testState( "<response> <result msgformat=\"odf\" > <return returnCode=\"200\"/> <msg> ", OmiState_Msg );
+
+    testState( "<Objects><Object><id>a</id><Object><id>b</id><Object><id>c</id></Object></Object>", OdfState_ObjectObjects );
+
+    OmiParser_destroy(p);
+
+
+#test ParserPoolT
+    for (int i = 0; i < ParserPoolSize; ++i) {
+      OmiParser * p = getParser(0);
+      ck_assert_ptr_ne(p, NULL);
+    }
+    OmiParser * p = getParser(0);
+    ck_assert_ptr_eq(p, NULL);
+
+
+#test DepthLimitT
+    createParser(p);
+    p->st = OdfState_ObjectObjects;
+    for (int i = 1; i < OdfDepthLimit; ++i)
+        ck_assert_int_eq(runParser(p, "<Object><id>a</id>"), Err_OK);
+    ck_assert_int_eq(runParser(p, "<Object><id>a</id>"), Err_TooDeepOdf);
+    OmiParser_destroy(p);
+
+#test OmiVersionsT
+    ck_assert_int_eq(parseOmiVersion(calcHashCode("http://www.opengroup.org/xsd/omi/1.0/")), OmiV1_0_ns);
+    ck_assert_int_eq(parseOmiVersion(calcHashCode("omi.xsd")), OmiV1_ns);
+    ck_assert_int_eq(parseOmiVersion(calcHashCode("1.0")), OmiV1);
+    ck_assert_int_eq(parseOmiVersion(calcHashCode("2.0")), OmiV2);
+    ck_assert_int_eq(parseOmiVersion(calcHashCode("3.0")), OmiV_unknown);
+
+
+#test InvalidBranchesT
+    createParser(p);
+
+    ck_assert_int_eq(runParser(p, "<notOmiEnvelope>"), Err_InvalidElement);
+
+    p->st = OmiState_OmiEnvelope;
+    ck_assert_int_eq(runParser(p, "<noRead>"), Err_InvalidElement);
+
+    restartParser(p);
+    p->st = OmiState_OmiEnvelope;
+    ck_assert_int_eq(runParser(p, "<read msgformat=\"rtf\" "), Err_InvalidDataFormat);
     
+    restartParser(p);
+    p->st = OmiState_OmiEnvelope;
+    ck_assert_int_eq(runParser(p, "<write interval=\"1\""), Err_InvalidAttribute);
 
+    restartParser(p);
+    p->st = OmiState_OmiEnvelope;
+    ck_assert_int_eq(runParser(p, "<read><not_a_message>"), Err_InvalidElement);
+
+    p->st = OmiState_Return;
+    ck_assert_int_eq(runParser(p, "<requestID wrong=\"\">"), Err_InvalidAttribute);
+
+    restartParser(p);
+    p->st = OdfState_Objects;
+    ck_assert_int_eq(runParser(p, "<Object some=\"1\">"), Err_OK);
+
+    p->st = OdfState_InfoItem;
+    ck_assert_int_eq(runParser(p, "<description lang=\"\">"), Err_OK);
+
+    p->st = OdfState_ObjectInfoItems;
+    ck_assert_int_eq(runParser(p, "<InfoItem myattr=\"0\">"), Err_OK);
+
+    p->st = OdfState_InfoItem;
+    ck_assert_int_eq(runParser(p, "<MetaData wrong=\"\">"), Err_InvalidAttribute);
+
+    restartParser(p);
+    p->st = OdfState_InfoItem;
+    ck_assert_int_eq(runParser(p, "<value wrong=\"\">"), Err_InvalidAttribute);
+
+    restartParser(p);
+
+    p->st = OdfState_InfoItem;
+    ck_assert_int_eq(runParser(p, "<value></fail>"), Err_NonMatchingCloseTag);
+
+    restartParser(p);
+    p->st = OmiState_Ready;
+    ck_assert_int_eq(runParser(p, "<fail>"), Err_InternalError);
+
+    p->st = OdfState_Object;
+    ck_assert_int_eq(runParser(p, "<id>&amp;</id>"), Err_OK);
+
+    p->st = OdfState_Object;
+    ck_assert_int_eq(runParser(p, "&aseu;"), Err_InvalidCharRef);
+
+    ck_assert_int_eq(runParser(p, "<oeu="), Err_XmlError);
+
+    restartParser(p);
+    OmiParserState strictStates[] = {
+      OmiState_Response, OmiState_Result, OmiState_Return, OmiState_Msg, OdfState_Objects,
+      OdfState_Object, OdfState_ObjectObjects, OdfState_MetaData, OdfState_InfoItem, OdfState_Value,
+      OdfState_End, OdfState_ObjectInfoItems, OmiState_RequestID, OdfState_Description, OdfState_Id};
+    for (int i = 0; i < (int)sizeof_array(strictStates); ++i) {
+      p->st = strictStates[i];
+      ck_assert_int_eq(runParser(p, "<wrong>"), Err_InvalidElement);
+    }
+
+
+    OmiParser_destroy(p);

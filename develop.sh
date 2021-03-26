@@ -5,5 +5,5 @@ if [[ $1 == "debug" ]]; then
     exit 0
 fi
 
-watch.sh 'src/* test/* Makefile' make test
+watch.sh 'src/* test/* Makefile' 'make test && make coverage-html'
 

@@ -96,7 +96,7 @@ void OmiParser_destroy(OmiParser* p){
     } else return Err_InvalidElement
 
 
-static inline OmiVersion parseVersion(strhash xmlns) {
+OmiVersion parseOmiVersion(strhash xmlns) {
     switch (xmlns) {
         case h_xmlnsOmi2:   return OmiV2_ns;
         case h_xmlnsOmi1:   return OmiV1_ns;
@@ -134,7 +134,7 @@ static inline int processOmiEnvelope(OmiParser *p, yxml_ret_t r){
             switch (calcHashCode(p->xmlSt.attr)) {
                 case h_xmlns:
                 case h_version:
-                    p->parameters.version = max(p->parameters.version, parseVersion(p->stHash.hash));
+                    p->parameters.version = max(p->parameters.version, parseOmiVersion(p->stHash.hash));
                     break;
                 case h_ttl:
                     ttl = parseFloat(p->tempString);
@@ -142,6 +142,7 @@ static inline int processOmiEnvelope(OmiParser *p, yxml_ret_t r){
                             p->parameters.arrival + (uint) ttl 
                             : 36500u * 24 * 3600); // time unit?; full seconds used instead of ms?
                     break;
+                default: break; //proprietary attr
             }
             break;
         case YXML_ELEMSTART:
@@ -167,10 +168,23 @@ static inline int processOmiEnvelope(OmiParser *p, yxml_ret_t r){
     return 0;
 }
 
+/* strategy for coverage
+static inline int verbElems(OmiParser *p){
+    switch (calcHashCode(p->xmlSt.elem)) {
+        case h_msg:
+            p->st = OmiState_Msg;
+            return 0;
+        case h_requestID: // requestID allowed for every request for now (only cancel requires it)
+            p->st = OmiState_RequestID;
+            return 0;
+        default: return Err_InvalidElement;
+    }
+}*/
+
 static inline int processVerb(OmiParser *p, yxml_ret_t r) {
     switch (r) {
         case YXML_ATTRSTART:
-            p->tempStringLength = 0;
+            initTempString(p);
             break;
         case YXML_ATTRVAL:
             dataToTempString(p);
@@ -178,7 +192,7 @@ static inline int processVerb(OmiParser *p, yxml_ret_t r) {
         case YXML_ATTREND:
             switch (calcHashCode(p->xmlSt.attr)) {
                 case h_msgformat:
-                    if (strcmp(p->tempString, s_odf))
+                    if (p->stHash.hash == h_odf)
                         p->parameters.format = OmiOdf;
                     else return Err_InvalidDataFormat;
                     break;
@@ -186,8 +200,6 @@ static inline int processVerb(OmiParser *p, yxml_ret_t r) {
                     switch (p->parameters.requestType) {
                         case OmiRead:
                             p->parameters.requestType = OmiSubscribe; break;
-                        case OmiSubscribe: 
-                            break; // Double interval attribute?
                         default: return Err_InvalidAttribute; // interval can only be used with read to create a subscription.
                     }
                     p->parameters.interval = parseFloat(p->tempString); // NOTE time unit?; full seconds or ms?
@@ -203,12 +215,25 @@ static inline int processVerb(OmiParser *p, yxml_ret_t r) {
             switch (calcHashCode(p->xmlSt.elem)) {
                 case h_msg:
                     p->st = OmiState_Msg;
-                    return 0;
+                    break;
                 case h_requestID: // requestID allowed for every request for now (only cancel requires it)
                     p->st = OmiState_RequestID;
-                    return 0;
+                    break;
                 default: return Err_InvalidElement;
             }
+        default: break;
+    }
+    return 0;
+}
+            //return verbElems(p);
+static inline int processResponse(OmiParser *p, yxml_ret_t r){
+    switch (r) {
+        case YXML_ELEMSTART:
+            requireTag(result, OmiState_Result);
+            break;
+        case YXML_ELEMEND:
+            p->st = OdfState_End;
+            break;
         default: break;
     }
     return 0;
@@ -240,18 +265,22 @@ static inline int processReturn(OmiParser *p, yxml_ret_t r){
             switch (calcHashCode(p->xmlSt.elem)) {
                 case h_requestID:
                     p->st = OmiState_RequestID;
-                    return 0;
+                    break;
                 case h_msg:
                     p->st = OmiState_Msg;
-                    return 0;
+                    break;
                 default:
                     return Err_InvalidElement;
             }
+        case YXML_ELEMEND:
+            if (elementEquals(response)) // </result>: after ELEMEND, elem is set to parent tag
+                p->st = OmiState_Response;
         default: break;
     }
     return 0;
 }
 static inline int processRequestID(OmiParser *p, yxml_ret_t r){
+    char * rId;
     switch (r) {
         case YXML_CONTENT:
             dataToTempString(p);
@@ -261,10 +290,11 @@ static inline int processRequestID(OmiParser *p, yxml_ret_t r){
                 p->st = OmiState_Return;
             else
                 p->st = OmiState_Verb;
-            break;
+            storeTempStringOrError(rId);
+            return p->odfCallback(p, NULL, OdfParserEvent(PE_RequestID, rId));
         case YXML_ELEMSTART: // not allowed
             return Err_InvalidElement;
-        default: break;
+        default: return Err_InvalidAttribute;
     }
     return 0;
 }
@@ -273,9 +303,10 @@ static inline int processMsg(OmiParser *p, yxml_ret_t r){
         if (r == YXML_ELEMSTART) {
             requireTag(Objects, OdfState_Objects);
         }
-    } else {
-        return Err_InvalidDataFormat; // Format not implemented
-    }
+    } 
+    //else { // Error returned earlier when reading message format
+    //return Err_InvalidDataFormat; // Format not implemented
+    //}
     return 0;
 }
 static inline int processObjects(OmiParser *p, yxml_ret_t r){
@@ -310,7 +341,6 @@ static inline int processObject(OmiParser *p, yxml_ret_t r){
     return 0;
 }
 static inline int processId(OmiParser *p, yxml_ret_t r){
-    switch (r) {
         // TODO: handle attrs like idType
         //case YXML_ATTRSTART:
         //    p->tempStringLength = 0;
@@ -321,6 +351,7 @@ static inline int processId(OmiParser *p, yxml_ret_t r){
         //case YXML_ATTREND:
         //    ...
         //    p->tempStringLength = 0;
+    switch (r) {
         case YXML_CONTENT:
             dataToTempString(p);
             break;
@@ -353,11 +384,11 @@ static inline int processObjectInfoItems(OmiParser *p, yxml_ret_t r){
             }
             break;
         case YXML_ELEMEND:
-            //if (p->currentOdfPath->flags & PF_) //(elementEquals(Object)) {
-            if (p->currentOdfPath->depth == 1)
-                p->st = OdfState_End;
-            else
-                p->st = OdfState_ObjectObjects;
+            // Commented; we can go to ObjectObjects as it is essentially the same as Objects
+            //if (p->currentOdfPath->depth == 2)
+            //    p->st = OdfState_Objects;
+            //else
+            p->st = OdfState_ObjectObjects;
             //}
             OmiParser_popPath(p);
             break;
@@ -420,6 +451,7 @@ static inline int processInfoItem(OmiParser *p, yxml_ret_t r){
                     break;
                 default: break; // TODO: Save others as metadata
             }
+            break;
         case YXML_ELEMSTART:
             switch (calcHashCode(p->xmlSt.elem)) {
                 case h_description:
@@ -431,6 +463,9 @@ static inline int processInfoItem(OmiParser *p, yxml_ret_t r){
                     return OmiParser_pushPath(p, s_MetaData, PF_IsMetaData);
                 case h_value:
                     p->st = OdfState_Value;
+                    break;
+                default:
+                    return Err_InvalidElement;
             }
             break;
         case YXML_ELEMEND:
@@ -480,25 +515,24 @@ static inline int processValue(OmiParser *p, yxml_ret_t r){
                     return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_ValueDateTime, data));
                 case h_type:
                     return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_ValueType, data));
-                default: break; // TODO: Save others as metadata
+                default: 
+                    break;
             }
-            break;
-        case YXML_CONTENT:
-            dataToTempString(p);
-            break;
-        case YXML_ELEMSTART:
-            if (!elementEquals(value)) { // FIXME: Error? implement Call request?
-                return Err_InvalidElement;
-            }
-            break;
+            free(data);
+            return Err_InvalidAttribute;
         case YXML_ELEMEND:
             p->st = OdfState_InfoItem;
             storeTempStringOrError(data);
             return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_ValueData, data));
+            //break;
+        case YXML_CONTENT:
+            dataToTempString(p);
             break;
         default:
-            break;
+            return Err_InvalidElement;
     }
+        //case YXML_ELEMSTART: // Moved to default
+            //if (!elementEquals(value)) { // FIXME: Error? implement Call request?
     return 0;
 
 }
@@ -545,10 +579,7 @@ ErrorResponse runParser(OmiParser * p, char * inputChunk) {
             case OmiState_Verb:
                 StateMachineHandler(processVerb);
             case OmiState_Response:
-                if (r == YXML_ELEMSTART) {
-                    requireTag(result, OmiState_Result);
-                }
-                break;
+                StateMachineHandler(processResponse);
             case OmiState_Result:
                 StateMachineHandler(processResult);
             case OmiState_RequestID:

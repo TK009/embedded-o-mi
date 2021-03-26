@@ -138,4 +138,6 @@ OString * OString_init(OString* self, char * string);
 strhash OString_hash(OString* self);
 strhash OString_len(OString* self);
 
+#define sizeof_array(a) (sizeof(a) / sizeof(*(a)))
+
 #endif

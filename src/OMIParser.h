@@ -77,6 +77,7 @@ typedef enum OdfParserEventType {
     PE_ValueDateTime,
     PE_ValueType,
     PE_ValueData,
+    PE_RequestID,
 } OdfParserEventType;
 
 typedef struct OdfParserEvent {
@@ -143,5 +144,6 @@ yxml_ret_t runXmlParser(OmiParser * p, char ** inputChunkP, uint maxBytes);
 //StringStorage stringStorage;
 
 
+OmiVersion parseOmiVersion(strhash xmlns);
 
 #endif
