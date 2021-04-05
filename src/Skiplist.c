@@ -72,16 +72,30 @@ void Skiplist_destroy(Skiplist* slist){
 
 // return the associated value, or NULL if the key was not found.
 void* Skiplist_get(Skiplist* slist, const void* key){
+    SkiplistEntry* res = Skiplist_find(slist, key);
+    if (res) return res->value;
+    return NULL;
+}
+
+SkiplistEntry* Skiplist_find(Skiplist* slist, const void *key) {
+    SkiplistEntry * prev[MAX_SKIPLIST_HEIGHT];
+    return Skiplist_findP(slist, key, prev);
+}
+// Get with previous link information
+SkiplistEntry* Skiplist_findP(Skiplist* slist, const void* key, SkiplistEntry * prev[MAX_SKIPLIST_HEIGHT]) {
     SkiplistEntry * curr = slist->head;
     int level = curr->height - 1;
     
     while (curr != NULL && level >= 0) {
+        prev[level] = curr;
         if (curr->next[level] == NULL) { // End of this level
             -- level;
         } else {
             int cmp = slist->compare(curr->next[level]->key, key);
             if (cmp == 0) { // Found
-                return (curr->next[level]->value); 
+                for (;level >= 0; --level)
+                    prev[level] = curr;
+                return (curr->next[level+1]); 
             } else if (cmp > 0) { // Drop down a level 
                 -- level;
             } else { // Keep going at this level
@@ -91,9 +105,17 @@ void* Skiplist_get(Skiplist* slist, const void* key){
     }
     return NULL; // not found
 }
+void Skiplist_del(Skiplist* slist, SkiplistEntry *condemned, SkiplistEntry * prev[MAX_SKIPLIST_HEIGHT]) {
+    // Remove the condemned node from the chain
+    int i;
+    for (i = condemned->height - 1; i >= 0; -- i) {
+        prev[i]->next[i] = condemned->next[i];
+    }
+    slist->alloc->free(condemned);
+}
 
-// return the replaced value or NULL if new
-void* Skiplist_set(Skiplist* slist, void* key, void* value) {
+// return the (current key, replaced value) or (NULL, NULL) if new; existing keys are not replaced
+Pair Skiplist_set(Skiplist* slist, void* key, void* value) {
     SkiplistEntry * prev[MAX_SKIPLIST_HEIGHT];
     SkiplistEntry * curr = slist->head;
     int level = curr->height - 1;
@@ -108,7 +130,7 @@ void* Skiplist_set(Skiplist* slist, void* key, void* value) {
             if (cmp == 0) { // Found
                 void* old = curr->next[level]->value;
                 curr->next[level]->value = (value);
-                return old;
+                return (Pair){curr->next[level]->key, old};
             } else if (cmp > 0) { // Drop down a level 
                 -- level;
             } else { // Keep going at this level
@@ -132,35 +154,37 @@ void* Skiplist_set(Skiplist* slist, void* key, void* value) {
         new_entry->next[i] = prev[i]->next[i];
         prev[i]->next[i] = new_entry;
     }
-    return NULL;
+    return (Pair){ NULL, NULL };
 }
 
 
 Pair Skiplist_pop(Skiplist* slist, const void* key){ // remove and return the value
     SkiplistEntry * prev[MAX_SKIPLIST_HEIGHT];
-    SkiplistEntry * curr = slist->head;
-    int level = curr->height - 1;
+    SkiplistEntry * elem = Skiplist_findP(slist, key, prev);
+    //SkiplistEntry * curr = slist->head;
+    //int level = curr->height - 1;
 
-    // Find the list node just before the condemned node at every
-    // level of the chain
-    int cmp = 1;
-    while (curr != NULL && level >= 0) {
-        prev[level] = curr;
-        if (curr->next[level] == NULL) { // End
-            -- level;
-        } else {
-            cmp = slist->compare(curr->next[level]->key, key);
-            if (cmp >= 0) { // Drop down a level 
-                -- level;
-            } else { // Keep going at this level
-                curr = curr->next[level];
-            }
-        }
-    }
+    //// Find the list node just before the condemned node at every
+    //// level of the chain
+    //int cmp = 1;
+    //while (curr != NULL && level >= 0) {
+    //    prev[level] = curr;
+    //    if (curr->next[level] == NULL) { // End
+    //        -- level;
+    //    } else {
+    //        cmp = slist->compare(curr->next[level]->key, key);
+    //        if (cmp >= 0) { // Drop down a level 
+    //            -- level;
+    //        } else { // Keep going at this level
+    //            curr = curr->next[level];
+    //        }
+    //    }
+    //}
 
     // We found the match we want, and it's in the next pointer
-    if (curr && !cmp) { 
-        SkiplistEntry * condemned = curr->next[0];
+    //if (curr && !cmp) { 
+    if (elem) { 
+        SkiplistEntry * condemned = elem; //curr->next[0];
         // Remove the condemned node from the chain
         int i;
         for (i = condemned->height - 1; i >= 0; -- i) {

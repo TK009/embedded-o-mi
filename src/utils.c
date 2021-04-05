@@ -87,25 +87,31 @@ int first0Bit(int i) {
 schar int_compare(const int *a, const int *b) { return (*a < *b)? -1 : ((*a > *b)? 1 : 0); }
 schar uint_compare(const uint *a, const uint *b) { return (*a < *b)? -1 : ((*a > *b)? 1 : 0); }
 
-HString* HString_init(HString* hs, char* str){ if (hs) *hs = (HString){str, calcHashCode(str)}; return hs; }
+HString* HString_init(HString* hs, const char* str){
+    if (hs) {
+        PartialHash ph = emptyPartialHash;
+        const char * c = str;
+        while (*c) calcHashCodeC(*c++, &ph);
+        *hs = (HString){.value=str, .hash=ph.hash, .length=c-str};
+    }
+    return hs;
+}
 schar HString_compare(const HString *a, const HString *b) {
     return (a->hash < b->hash)? -1 : ((a->hash > b->hash)? 1 : strcmp(a->value, b->value));
 }
 
 OString * OString_init(OString* self, char * string){
-    if (self) *self = (OString){string, 0, 0, 0};
+    if (self) *self = (OString){.data=string, .hash=emptyPartialHash.hash, .length=0};
     return self;
 }
 strhash OString_hash(OString* self){
-    if (self->flags & OS_hasHash) return self->hash;
+    if (self->hash != emptyPartialHash.hash) return self->hash;
     self->hash = calcHashCodeL(self->data, OString_len(self));
-    self->flags |= OS_hasHash;
     return self->hash;
 }
 strhash OString_len(OString* self){
-    if (self->flags & OS_hasLen) return self->length;
+    if (self->length != 0 || self->data[0] == '\0') return self->length;
     self->length = strlen(self->data);
-    self->flags |= OS_hasLen;
     return self->length;
 }
 

@@ -7,6 +7,22 @@
 typedef const char * OdfId;
 typedef uint PathFlags;
 
+typedef union AnyValue {
+    char b;
+    float f;
+    double d;
+    //uint ui;
+    int i;
+    int64 l;
+    char * str;
+    void * obj;
+} AnyValue;
+
+typedef struct SingleValue {
+    eomi_time timestamp;
+    AnyValue value;
+} SingleValue;
+
 // General idea is to build a prefix tree for O-DF
 // ...in other words, linked list of each Path sharing same elements
 struct Path {
@@ -17,6 +33,7 @@ struct Path {
     uint idHashCode;
     uint hashCode;
     PathFlags flags;
+    AnyValue value;
 };
 typedef struct Path Path;
 
@@ -39,7 +56,8 @@ int odfBinarySearch(const OdfTree* tree, const Path* needle, int* resultIndex);
 Path* addPath(OdfTree* tree, const char newPath[]);
 
 typedef enum ValueType {
-    V_Int = 0,
+    V_String = 0, // the default
+    V_Int = 1,
     V_Float,
     V_Long,
     V_Double,
@@ -55,7 +73,7 @@ typedef enum ValueType {
 
 // NOTE: most of these are placeholders only
 typedef enum PathFlag {
-    PF_ValueType             = 1 & 2 & 4 & 8, // For InfoItem values
+    PF_ValueType             = 1 | 2 | 4 | 8, // For InfoItem values
     PF_IsInfoItem            = 1 << 4, // Object tag or otherwise InfoItem or one below
     PF_IsMetaData            = 1 << 5, // MetaData tag
     PF_IsDescription         = 1 << 6, // description tag
@@ -72,6 +90,9 @@ typedef enum PathFlag {
     PF_IsMetaDataChild       = 1 << 17, // Child of metadata
     PF_isDirty               = 1 << 18, // Has modifications that should be saved to flash
     PF_OdfIdMalloc           = 1 << 19, // odfId string is malloc'd and should be freed when destroying this Path
+    PF_ValueMalloc           = 1 << 20, // odfId string is malloc'd and should be freed when destroying this Path
+    //PF_ValueChangeSub = 1 << 21, // Value change event instead of a new value based on timestamp
+    //FP_NewItemSub = 1 << 22, // interval=-2 subscription of new info items in the sub structure
     //PF_isExternalReadOnly    = 1 <<  // Script can write
 } PathFlag;
 

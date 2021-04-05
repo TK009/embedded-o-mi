@@ -15,7 +15,7 @@ CSTD = -std=c11 #-D_POSIX_C_SOURCE=200809L
 #CXX    = g++
 CC     = @clang
 rm     = rm -f
-GDB    = CK_FORK=no gdb
+GDB    = ASAN_OPTIONS=detect_leaks=0 CK_FORK=no gdb
 
 # change these to set the proper directories where each files shoould be
 SRCDIR  := src
@@ -126,7 +126,7 @@ SHELL=/bin/bash -o pipefail
 # Run tests, maybe print backtrace, run valgrind
 $(OBJDIR)/%.log: $(OBJDIR)/%.test
 	@echo -e "\nRUNNING TEST $<"
-	@(LLVM_PROFILE_FILE="$(basename $<).profraw" ./$< | tee $@) || (ASAN_OPTIONS=detect_leaks=0 $(GDB) -q -ex run -ex bt -ex "kill inferiors 1" -ex quit $<; exit 1)
+	@(LLVM_PROFILE_FILE="$(basename $<).profraw" ./$< | tee $@) || ($(GDB) -q -ex run -ex bt -ex "kill inferiors 1" -ex quit $<; exit 1)
 
 #@echo -e "\nRUNNING VALGRIND" | tee -a $@
 #CK_FORK=no valgrind -q --leak-check=full $< >> $@
@@ -135,7 +135,7 @@ $(OBJDIR)/%.log: $(OBJDIR)/%.test
 test: $(TESTRESULTS)
 	@echo
 	@llvm-profdata merge -sparse $(TESTDATA) -o $(OBJDIR)/default.profdata
-	@llvm-cov report -use-color -instr-profile=$(OBJDIR)/default.profdata $(OBJDIR)/odf.test $(addprefix "-object=", $(TESTBINARIES)) | sed 's/-----------------------------------------//'
+	@llvm-cov report --use-color -ignore-filename-regex='yxml*' --instr-profile=$(OBJDIR)/default.profdata $(OBJDIR)/odf.test $(addprefix "--object=", $(TESTBINARIES)) | sed 's/-----------------------------------------//'
 	@echo
 	@echo "Some uncovered regions (search for 0 count lines if no red):"
 	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata "${SRCDIR}/$(shell ls -t ${SRCDIR} | head -1)" --use-color --show-expansions --show-line-counts-or-regions | egrep --color=never '(\[0;41m|   \^?0)' -C 3 | head -n 25 || true

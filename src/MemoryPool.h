@@ -20,9 +20,20 @@ typedef struct MemoryPool {
 
 // size will be BLOCK_COUNT*BlockSize
 #define CreateStaticMemoryPool(TYPE, NAME, BLOCK_COUNT) \
-  static uint NAME ## Free[BLOCK_COUNT] = {0}; \
-  static TYPE NAME ## Data[PoolSize(BLOCK_COUNT)] = {0}; \
-  static MemoryPool NAME = { 0, BLOCK_COUNT, sizeof(TYPE), PoolSize(BLOCK_COUNT), PoolSize(BLOCK_COUNT), (uint *)&(NAME ## Free), (void*)&(NAME ## Data) };
+  uint NAME ## Free[BLOCK_COUNT] = {0}; \
+  TYPE NAME ## Data[PoolSize(BLOCK_COUNT)] = {0}; \
+  MemoryPool NAME = { 0, BLOCK_COUNT, sizeof(TYPE), PoolSize(BLOCK_COUNT), PoolSize(BLOCK_COUNT), (uint *)&(NAME ## Free), (void*)&(NAME ## Data) }; \
+  void* NAME ## _alloc(size_t s) {(void) s; return poolAlloc(&NAME);} \
+  void* NAME ## _calloc(size_t n, size_t size) {(void) size; (void) n; return poolCAlloc(&NAME);} \
+  void NAME ## _free(void *p) {poolFree(&NAME, p);} \
+  void NAME ## _nullfree(void **p) {poolFree_(&NAME, p);} \
+  const Allocator NAME ## Allocator = {\
+      .malloc = NAME ## _alloc, \
+      .calloc = NAME ## _calloc, \
+      .realloc = NULL, \
+      .free = NAME ## _free, \
+      .nullFree = NAME ## _nullfree \
+  };
 
 // Create pool using the given allocation function
 MemoryPool* CreateDynamicMemoryPool(size_t elementSize, uint blockCount, Allocator* a);

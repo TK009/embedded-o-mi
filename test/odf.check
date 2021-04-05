@@ -5,7 +5,7 @@
 
 #test pathCompareT
     Path Objects;
-    Path_init( &Objects, 1, 0, "Objects", 0 );
+    Path_init( &Objects, 1, NULL, "Objects", 0 );
     Path MyObject;  // Objects/MyObject
     Path_init( &MyObject, 2, &Objects, "MyObject", 0 );
     Path MyItem;  // Objects/MyObject/MyItem

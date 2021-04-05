@@ -7,7 +7,7 @@ OdfParserEvent expectedEvent = {PE_Path, NULL};
 static ErrorResponse pathEventCb(OmiParser *parser, Path *path, OdfParserEvent actualEvent) {
   ck_assert_int_eq(actualEvent.type, expectedEvent.type);
   if (expectedEvent.data != NULL){
-    ck_assert_ptr_ne(actualEvent.data, NULL);
+    //ck_assert_ptr_ne(actualEvent.data, NULL);
     ck_assert_str_eq(actualEvent.data, expectedEvent.data);
   }
   OdfTree odf;
@@ -158,11 +158,12 @@ static char* failStringCallback(OmiParser *p, const char * str, size_t len) {
     expectedEvent = (OdfParserEvent){PE_ValueDateTime, "2019-11-28T14:34:04.519+02:00"};
     testState("<value dateTime=\"2019-11-28T14:34:04.519+02:00\"", OdfState_Value);
 
-    expectedEvent = (OdfParserEvent){PE_ValueType, "xs:integer"};
+    //expectedEvent = (OdfParserEvent){PE_ValueType, "xs:integer"};
     testState(" type=\"xs:integer\"", OdfState_Value);
 
-    expectedEvent = (OdfParserEvent){PE_ValueData, "420"};
+    expectedEvent = (OdfParserEvent){PE_ValueData, NULL};
     testState(">420</value>", OdfState_InfoItem);
+    ck_assert_int_eq(p->currentOdfPath->value.i, 420);
 
     testState("</InfoItem> \n", OdfState_MetaData);
     testState("</MetaData> \n", OdfState_InfoItem);
@@ -200,6 +201,10 @@ static char* failStringCallback(OmiParser *p, const char * str, size_t len) {
     testState( "<call callback=\"http://localhost\">", OmiState_Verb);
     ck_assert_int_eq(p->parameters.requestType, OmiCall);
     ck_assert_str_eq(p->parameters.callbackAddr, "http://localhost");
+
+    p->st = OmiState_OmiEnvelope;
+    testState( "<delete>", OmiState_Verb);
+    ck_assert_int_eq(p->parameters.requestType, OmiDelete);
 
     OmiParser_destroy(p);
 
@@ -303,7 +308,7 @@ static char* failStringCallback(OmiParser *p, const char * str, size_t len) {
     ck_assert_int_eq(runParser(p, "<fail>"), Err_InternalError);
 
     p->st = OdfState_Object;
-    ck_assert_int_eq(runParser(p, "<id>&amp;</id>"), Err_OK);
+    ck_assert_int_eq(runParser(p, "<id>&amp;&#x41;</id>"), Err_OK);
 
     p->st = OdfState_Object;
     ck_assert_int_eq(runParser(p, "&aseu;"), Err_InvalidCharRef);
@@ -320,5 +325,41 @@ static char* failStringCallback(OmiParser *p, const char * str, size_t len) {
       ck_assert_int_eq(runParser(p, "<wrong>"), Err_InvalidElement);
     }
 
+
+    OmiParser_destroy(p);
+
+
+#define testValue(odf, vtype) \
+    ck_assert_int_eq(runParser(p, odf), Err_OK);\
+    ck_assert_int_eq(p->currentOdfPath->flags & PF_ValueType, vtype)
+
+#test ValueTypesT
+    createParser(p);
+    p->st = OmiState_Msg;
+    testState("<Objects><Object><id>a</id><InfoItem name=\"i\">", OdfState_InfoItem);
+    AnyValue * current = & p->currentOdfPath->value;
+
+    testValue("<value type=\"xs:float\">1.0</value>", V_Float);
+    ck_assert_float_eq(current->f, 1.0);
+    testValue("<value type=\"xs:double\">1.0</value>", V_Double);
+    ck_assert_double_eq(current->d, 1.0);
+    testValue("<value type=\"xs:short\">-1</value>", V_Short);
+    ck_assert_int_eq(current->i, -1);
+    testValue("<value type=\"xs:byte\">-1</value>", V_Byte);
+    ck_assert_int_eq(current->i, -1);
+    testValue("<value type=\"xs:string\">str</value>", V_String);
+    //ck_assert_str_eq(current->i, -1); freed already
+    testValue("<value type=\"xs:boolean\">true</value>", V_Boolean);
+    ck_assert((bool)current->i);
+    testValue("<value type=\"xs:unsignedInt\">1</value>", V_UInt);
+    ck_assert_int_eq(current->i, 1);
+    testValue("<value type=\"xs:unsignedShort\">1</value>", V_UShort);
+    ck_assert_int_eq(current->i, 1);
+    testValue("<value type=\"xs:unsignedByte\">255</value>", V_UByte);
+    ck_assert_int_eq(current->i, 255);
+    testValue("<value type=\"xs:long\">1</value>", V_Long);
+    ck_assert_int_eq(current->i, 1);
+    testValue("<value type=\"randomtype\">1</value>", V_String);
+    //ck_assert_str_eq(current->i, -1); freed already
 
     OmiParser_destroy(p);

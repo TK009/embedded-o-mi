@@ -18,8 +18,17 @@ Path* Path_init(Path* self, uchar depth, Path* parent, OdfId odfId, PathFlags fl
             .idHashCode = idHashCode,
             .hashCode = idHashCode ^ parentHash,
             .depth = depth,
-            .flags = flags
+            .flags = flags,
+            .value.l = 0LL
         };
+        //self->odfId = odfId;
+        //self->parent = parent;
+        //self->odfIdLength = odfIdLength;
+        //self->idHashCode = idHashCode;
+        //self->hashCode = idHashCode ^ parentHash;
+        //self->depth = depth;
+        //self->flags = flags;
+        //self->value.l = (int64) 0;
     }
     return self;
 }

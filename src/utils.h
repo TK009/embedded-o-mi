@@ -9,6 +9,7 @@ typedef signed char schar;
 typedef unsigned char uchar;
 typedef unsigned int uint;
 typedef unsigned short ushort;
+typedef long long int64;
 
 typedef unsigned int eomi_time;
 
@@ -73,9 +74,12 @@ typedef const struct Allocator{
     void* (*calloc)(size_t n, size_t size);
     void* (*realloc)(void *ptr, size_t size);
     void (*free)(void *ptr);
+    void (*nullFree)(void **ptr);
 } Allocator;
 
-static const Allocator stdAllocator = {malloc, calloc, realloc, free};
+static void stdNullFree(void **ptr) {free(*ptr); *ptr = NULL;}
+
+static const Allocator stdAllocator = {malloc, calloc, realloc, free, stdNullFree};
 
 #define _NEW_ARGS(T, ...) T ## _init(malloc(sizeof(T)), __VA_ARGS__)
 #define _NEW(T) T ## _init(malloc(sizeof(T)))
@@ -105,12 +109,13 @@ static const Allocator stdAllocator = {malloc, calloc, realloc, free};
 //#define ALLOC_INIT(alloc, type, ...)   \
 //    (type *)memdup(alloc(sizeof(type)), (type[]){ __VA_ARGS__  }, sizeof(type))
 
-// String with guaranteed hash
+// String with guaranteed hash and length
 typedef struct HString{
-    char* value;
+    ushort length;
     strhash hash;
+    const char* value;
 } HString;
-HString* HString_init(HString* hs, char* str);
+HString* HString_init(HString* hs, const char* str);
 // Hash u.integer ordering, not lexicographical order
 schar HString_compare(const HString *a, const HString *b);
 
@@ -120,18 +125,11 @@ typedef struct Pair {
 } Pair;
 
 
-typedef enum OStringFlags {
-    OS_hasLen = 1,
-    OS_hasHash = 2,
-    OS_isStatic = 4
-} OStringFlags;
-
 // String which has lazy length and lazy hash value stored (lazy=calculated when first needed)
 typedef struct OString {
-    char * data;
-    OStringFlags flags;
     ushort length;
     strhash hash;
+    char * data;
 } OString;
 
 OString * OString_init(OString* self, char * string);

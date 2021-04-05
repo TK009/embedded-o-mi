@@ -77,6 +77,8 @@ Path* OmiParser_popPath(OmiParser* p){
     //if (!(old->flags & (PF_IsDescription | PF_IsMetaData))) // desc and meta have static strings
     if (old->idHashCode != h_Objects)
         free((void*) old->odfId); // TODO: change hardcoded free function if custom allocator is used
+    //if (old->flags & PF_ValueMalloc) // free handled by the odfCallback
+    //    free((void*) old->value.str); // TODO: change hardcoded free function if custom allocator is used
     if (old == p->pathStack) // root
         p->currentOdfPath = NULL;
     else
@@ -139,7 +141,7 @@ static inline int processOmiEnvelope(OmiParser *p, yxml_ret_t r){
                 case h_ttl:
                     ttl = parseFloat(p->tempString);
                     p->parameters.deadline =  (ttl > 0?
-                            p->parameters.arrival + (uint) ttl 
+                            p->parameters.arrival + (uint) ttl
                             : 36500u * 24 * 3600); // time unit?; full seconds used instead of ms?
                     break;
                 default: break; //proprietary attr
@@ -147,6 +149,10 @@ static inline int processOmiEnvelope(OmiParser *p, yxml_ret_t r){
             break;
         case YXML_ELEMSTART:
             switch (calcHashCode(p->xmlSt.elem)) {
+                case h_response:
+                    p->parameters.requestType = OmiResponse;
+                    p->st = OmiState_Response;
+                    return 0;
                 case h_read:
                     p->parameters.requestType = OmiRead; break;
                 case h_write:
@@ -155,15 +161,13 @@ static inline int processOmiEnvelope(OmiParser *p, yxml_ret_t r){
                     p->parameters.requestType = OmiCancel; break;
                 case h_call:
                     p->parameters.requestType = OmiCall; break;
-                case h_response:
-                    p->parameters.requestType = OmiResponse;
-                    p->st = OmiState_Response;
-                    return 0;
+                case h_delete:
+                    p->parameters.requestType = OmiDelete; break;
                 default: return Err_InvalidElement;
             }
             p->st = OmiState_Verb;
             return 0;
-        default: break; 
+        default: break;
     }
     return 0;
 }
@@ -303,7 +307,7 @@ static inline int processMsg(OmiParser *p, yxml_ret_t r){
         if (r == YXML_ELEMSTART) {
             requireTag(Objects, OdfState_Objects);
         }
-    } 
+    }
     //else { // Error returned earlier when reading message format
     //return Err_InvalidDataFormat; // Format not implemented
     //}
@@ -328,7 +332,7 @@ static inline int processObject(OmiParser *p, yxml_ret_t r){
         case YXML_ATTREND:
             switch (calcHashCode(p->xmlSt.attr)) {
                 case h_type: // TODO: Object "type" attribute
-                    break; 
+                    break;
                 default: break; // TODO Save other attributes as metadata
             }
             break;
@@ -497,7 +501,8 @@ static inline int processMetaData(OmiParser *p, yxml_ret_t r){
     return 0;
 }
 static inline int processValue(OmiParser *p, yxml_ret_t r){
-    char * data;
+    char * data = NULL;
+    strhash hash;
     switch (r) {
         case YXML_ATTRSTART:
             initTempString(p);
@@ -507,6 +512,7 @@ static inline int processValue(OmiParser *p, yxml_ret_t r){
             break;
         case YXML_ATTREND:
             storeTempStringOrError(data);
+            hash = p->stHash.hash;
             initTempString(p); // zero for content if attrs ended. Due to returns, cannot be after the switch
             switch (calcHashCode(p->xmlSt.attr)) {
                 case h_unixTime:
@@ -514,17 +520,77 @@ static inline int processValue(OmiParser *p, yxml_ret_t r){
                 case h_dateTime:
                     return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_ValueDateTime, data));
                 case h_type:
-                    return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_ValueType, data));
-                default: 
+                    switch (hash) {
+                        case h_xsint: case h_xsinteger: // h_xsdecimal
+                            p->currentOdfPath->flags = PF_IsInfoItem | V_Int;
+                            break;
+                        case h_xsfloat:
+                            p->currentOdfPath->flags = PF_IsInfoItem | V_Float;
+                            break;
+                        case h_xsdouble:
+                            p->currentOdfPath->flags = PF_IsInfoItem | V_Double;
+                            break;
+                        case h_xsshort:
+                            p->currentOdfPath->flags = PF_IsInfoItem | V_Short;
+                            break;
+                        case h_xsbyte:
+                            p->currentOdfPath->flags = PF_IsInfoItem | V_Byte;
+                            break;
+                        case h_xsstring:
+                            p->currentOdfPath->flags = PF_IsInfoItem | V_String;
+                            break;
+                        case h_xsboolean:
+                            p->currentOdfPath->flags = PF_IsInfoItem | V_Boolean;
+                            break;
+                        case h_xsunsignedInt: // h_xsnonNegativeInteger h_xspositiveInteger
+                            p->currentOdfPath->flags = PF_IsInfoItem | V_UInt;
+                            break;
+                        case h_xsunsignedShort:
+                            p->currentOdfPath->flags = PF_IsInfoItem | V_UShort;
+                            break;
+                        case h_xsunsignedByte:
+                            p->currentOdfPath->flags = PF_IsInfoItem | V_UByte;
+                            break;
+                        case h_xslong:
+                            p->currentOdfPath->flags = PF_IsInfoItem | V_Long;
+                            break;
+                        default:
+                            p->currentOdfPath->flags = PF_IsInfoItem | V_String;
+                            return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_ValueType, data));
+                    }
+                    free(data);
+                    return 0;
+                default:
                     break;
             }
             free(data);
             return Err_InvalidAttribute;
         case YXML_ELEMEND:
             p->st = OdfState_InfoItem;
-            storeTempStringOrError(data);
+            switch ((ValueType) p->currentOdfPath->flags & PF_ValueType) {
+                case V_Int: case V_Short: case V_Byte: case V_UShort: case V_UByte:
+                    p->currentOdfPath->value.i = parseInt(p->tempString);
+                    data = NULL;
+                    break;
+                case V_UInt: case V_Long:
+                    p->currentOdfPath->value.l = parseLong(p->tempString);
+                    data = NULL;
+                    break;
+                case V_Float:
+                    p->currentOdfPath->value.f = parseFloat(p->tempString);
+                    data = NULL;
+                    break;
+                case V_Double:
+                    p->currentOdfPath->value.d = parseDouble(p->tempString);
+                    data = NULL;
+                    break;
+                case V_String:
+                    storeTempStringOrError(data);
+                    p->currentOdfPath->flags |= PF_ValueMalloc;
+                    p->currentOdfPath->value.str = data;
+                    break;
+            }
             return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_ValueData, data));
-            //break;
         case YXML_CONTENT:
             dataToTempString(p);
             break;
@@ -562,7 +628,7 @@ ErrorResponse runParser(OmiParser * p, char * inputChunk) {
             default:
                 break;
         }
-        // TODO 
+        // TODO
         // To handle strings, a string storage is made with a block of memory and hash table with a skip list; skip list needs memory pool
         // Buffer is needed for strings not yet fully received
         ErrorResponse ret;

@@ -1,0 +1,69 @@
+// vim: syntax=c
+#include "StringStorage.h"
+#include "testUtils.h"
+
+#suite StringStorage
+
+#test StringStorageT
+  int capacity = stringStorageEntries.totalCount;
+  ck_assert_int_eq(capacity - stringStorageEntries.freeCount, 0);
+  StringStorage_init();
+  ck_assert_int_eq(capacity - stringStorageEntries.freeCount, 1);
+  ck_assert(!stringExists("hello"));
+  const char *org = "hello";
+  const char *stored = storeString(org);
+  ck_assert_ptr_ne(stored, NULL);
+  ck_assert_ptr_ne(stored, org);
+  ck_assert_int_eq(capacity - stringStorageMetadatas.freeCount, 1);
+  ck_assert_int_eq(capacity - stringWrappers.freeCount, 1);
+  ck_assert_int_eq(capacity - stringStorageEntries.freeCount, 2);
+  ck_assert_ptr_ne(((HString *)stringWrappers.data)->value, org);
+  ck_assert(stringExists("hello"));
+
+  const char *stored2 = storeString(org);
+  ck_assert_ptr_ne(stored2, NULL);
+  ck_assert_int_eq(((StringMetadata *)stringStorageMetadatas.data +1)->numUsages, 2);
+  ck_assert_ptr_ne(stored2, org);
+  ck_assert_int_eq(capacity - stringStorageMetadatas.freeCount, 1);
+  ck_assert_int_eq(capacity - stringWrappers.freeCount, 1);
+  ck_assert_int_eq(capacity - stringStorageEntries.freeCount, 2);
+  ck_assert_ptr_eq(stored, stored2);
+
+  storeString("test");
+  ck_assert(stringExists("test"));
+  storeString("many");
+  ck_assert(stringExists("many"));
+  storeString("strings");
+  ck_assert(stringExists("strings"));
+  const char *temporary = storeString("temporary");
+  ck_assert_ptr_ne(temporary, NULL);
+  ck_assert(stringExists("temporary"));
+  freeString("temporary");
+  ck_assert(!stringExists("temporary"));
+
+  freeString("nonexisting");
+  freeString("hello");
+  ck_assert(stringExists("hello"));
+  freeString("hello");
+  ck_assert(!stringExists("hello"));
+  //ck_assert_ptr_eq(, NULL);
+
+
+  Skiplist_destroy(&stringStorage);
+
+#test SkiplistExtraT
+  Skiplist sl;
+  Skiplist_init(&sl, NULL, &nullocator); // Null allocator
+
+  Skiplist_init(&sl, (compareFunc) int_compare, &stdAllocator);
+  int k = 5, v = 10;
+  Skiplist_set(&sl, &k, &v);
+  Pair old = Skiplist_pop(&sl, &k);
+  ck_assert_int_eq(*(int*)old.fst, 5);
+  ck_assert_int_eq(*(int*)old.snd, 10);
+  Pair old2 = Skiplist_pop(&sl, &k);
+  ck_assert_ptr_eq((int*)old2.fst, NULL);
+  ck_assert_ptr_eq((int*)old2.snd, NULL);
+
+  Skiplist_destroy(&sl);
+

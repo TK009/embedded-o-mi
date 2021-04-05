@@ -60,7 +60,14 @@ typedef struct Skiplist {
 Skiplist * Skiplist_init(Skiplist* sl, compareFunc compare, Allocator* a);
 void Skiplist_destroy(Skiplist* slist);
 void* Skiplist_get(Skiplist* slist, const void* key); // return the value
-void* Skiplist_set(Skiplist* slist, void* key, void* value); // return the replaced value or NULL if new
+SkiplistEntry* Skiplist_findP(Skiplist* slist, const void* key, SkiplistEntry * prev[MAX_SKIPLIST_HEIGHT]); // return the value
+SkiplistEntry* Skiplist_find(Skiplist* slist, const void *key);
+
+void Skiplist_del(Skiplist* slist, SkiplistEntry *elem, SkiplistEntry * prev[MAX_SKIPLIST_HEIGHT]);
+
+// return the replaced value or NULL if new; existing keys are not replaced
+Pair Skiplist_set(Skiplist* slist, void* key, void* value); 
+
 Pair Skiplist_pop(Skiplist* slist, const void* key); // remove and return the value
 
 #endif

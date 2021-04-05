@@ -48,6 +48,9 @@ typedef struct OmiRequestParameters {
 #define NamedStringData(name, str, hash) \
     static const char* s_ ## name = str; \
     static const strhash h_ ## name = hash;
+#define xsStringData(str, hash) \
+    static const char* s_xs ## str = "xs:"#str; \
+    static const strhash h_xs ## str = hash;
 
 StringData(omiEnvelope, 3735718108)
 StringData(version, 1181855383)
@@ -55,6 +58,7 @@ StringData(xmlns, 2376145825)
 StringData(ttl, 3173728859)
 StringData(read, 3470762949)
 StringData(write, 3190202204)
+StringData(delete, 1740784714)
 StringData(cancel, 107912219)
 StringData(response, 1499316702)
 StringData(call, 3018949801)
@@ -86,5 +90,18 @@ StringData(MetaData, 891574848)
 StringData(value, 1113510858)
 StringData(unixTime, 3907425434)
 StringData(dateTime, 1293334960)
+
+xsStringData(int, 1278669515)
+xsStringData(integer, 2692559660)
+xsStringData(float, 1349277360)
+xsStringData(double, 2054327359)
+xsStringData(long, 2086416348)
+xsStringData(short, 3489489204)
+xsStringData(byte, 1641634136)
+xsStringData(string, 1051773867)
+xsStringData(boolean, 2009594314)
+xsStringData(unsignedInt, 1584946050)
+xsStringData(unsignedShort, 3143947753)
+xsStringData(unsignedByte, 624143547)
 
 #endif

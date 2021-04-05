@@ -6,12 +6,19 @@
 
 
 // FIXME: error handling
-inline float parseFloat(char* str) {
+inline float parseFloat(const char* str) {
+    return atof(str);
+}
+// FIXME: error handling
+inline double parseDouble(const char* str) {
     return atof(str);
 }
 
 // FIXME: error handling
-//inline int parseInt(char* str) {
-//    return atoi(str);
-//}
+inline int parseInt(const char* str) {
+    return atoi(str);
+}
 
+inline long long parseLong(const char* str) {
+    return atoll(str);
+}
