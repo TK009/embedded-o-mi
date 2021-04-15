@@ -21,13 +21,18 @@ const char * storeHString(const HString *str) {
     memcpy(newStringWrapper, str, sizeof(HString));
 
     Pair replaced = Skiplist_set(&stringStorage, newStringWrapper, newMeta);
-    if (replaced.fst) {
+    if (replaced.fst) { // the same string already stored
         StringMetadata * oldMeta = replaced.snd;
         newMeta->numUsages += oldMeta->numUsages;
         poolFree(&stringStorageMetadatas, oldMeta);
         poolFree(&stringWrappers, newStringWrapper);
         return ((HString *)replaced.fst)->value;
-    } else {
+    } else { // new stored string
+        if (replaced.snd == (void*)1) { // Malloc failed for skiplist
+            poolFree(&stringStorageMetadatas, newMeta);
+            poolFree(&stringWrappers, newStringWrapper);
+            return NULL;
+        }
         char * copiedStr = StringAllocator(str->length+1);
         copiedStr = strcpy(copiedStr, str->value);
         newStringWrapper->value = copiedStr;

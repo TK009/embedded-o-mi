@@ -9,7 +9,7 @@ OPTIMIZE = #-O3 -flto
 
 
 CXXSTD = -std=c++14 
-CSTD = -std=c11 #-D_POSIX_C_SOURCE=200809L
+CSTD = -std=c11 # -D_POSIX_C_SOURCE=200809L
 
 
 #CXX    = g++
@@ -28,18 +28,19 @@ vpath $(SRCDIR) $(TESTDIR)
 #BASEDIR = $(SRCDIR)/base
 #FWDIRS  = $(sort $(dir $(wildcard $(FW)*/)))
 SRCS = $(shell find $(SRCDIR)/ -name '*.c')
+SRCS += $(shell find $(SRCDIR)/ -name '*.py')
 TESTSRCS = $(shell find $(TESTDIR)/ -name '*.check')
 OBJS := $(addsuffix .o,$(basename $(SRCS)))
 OBJS := $(OBJS:$(SRCDIR)/%=$(OBJDIR)/%)
-#TESTOBJS = $(addsuffix .o,$(basename $(TESTSRCS)))
-#TESTOBJS := $(TESTOBJS:$(TESTDIR)/%=$(OBJDIR)/%)
 TESTBINARIES = $(addsuffix .test,$(basename $(TESTSRCS)))
 TESTBINARIES := $(TESTBINARIES:$(TESTDIR)/%=$(OBJDIR)/%)
+TESTOBJS := $(addsuffix .check.o,$(basename $(TESTBINARIES)))
 TESTRESULTS = $(addsuffix .log,$(basename $(TESTBINARIES)))
 TESTDATA = $(addsuffix .profraw,$(basename $(TESTBINARIES)))
 
 
-HEADERS = -I$(SRCDIR)
+HEADERS = -iquote $(SRCDIR) -iquote $(OBJDIR)
+#HEADERS = -I $(SRCDIR) -I $(OBJDIR)
 CXXFLAGS = $(CXXSTD) $(HEADERS) $(DEBUGFLAGS) $(OPTIMIZE)
 CFLAGS = $(CSTD) $(HEADERS) $(DEBUGFLAGS) $(OPTIMIZE)
 
@@ -53,7 +54,8 @@ LDTESTFLAGS = `pkg-config --libs check` -fprofile-instr-generate -fcoverage-mapp
 EXECUTABLES :=  # $(BINDIR)/app
 
 
-# TODO
+
+# TODO: embedded compilation
 all: $(TESTBINARIES)
 	
 $(EXECUTABLES): | $(BINDIR)
@@ -64,11 +66,22 @@ $(BINDIR):
 $(OBJDIR):
 	mkdir -p $@
 
+
+
+# Code generators:
+
 $(OBJDIR)/%.check.c: $(TESTDIR)/%.check | $(OBJDIR)
 	checkmk $< > $@
 
+$(OBJDIR)/%.c: $(SRCDIR)/%.py
+	./$< c > $@
+$(OBJDIR)/%.h: $(SRCDIR)/%.py
+	./$< h > $@
 
-# DEPS
+
+
+
+# DEPS, FIXME: hardcoded to $(OBJDIR) by using $@
 DEPDIR := $(OBJDIR)
 #.d
 
@@ -77,15 +90,19 @@ COVERAGEDIR ?= $(OBJDIR)
 # always create dir?
 #$(shell mkdir -p $(DEPDIR) >/dev/null)
 
-DEPFLAGS = -MT $@ -MMD -MP -MF $(DEPDIR)/$*.Td
+# using $(@:.o=.Td) instead of $(DEPDIR)/$*.Td because of obj/%.check.o pattern misses ".check" part
+DEPFLAGS = -MT $@ -MMD -MP -MF $(@:.o=.Td)
 
 COMPILE.c = $(CC) $(DEPFLAGS) $(CFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
 #COMPILE.cc = $(CXX) $(DEPFLAGS) $(CXXFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
-POSTCOMPILE = @mv -f $(DEPDIR)/$*.Td $(DEPDIR)/$*.d && touch $@
+
+# using $(@:.o=.Td) instead of $(DEPDIR)/$*.Td because of obj/%.check.o pattern misses ".check" part
+POSTCOMPILE = @mv -f $(@:.o=.Td) $(@:.o=.d)
+# && touch $@
 
 %.o : %.c
 #%.o : %.c $(DEPDIR)/%.d
-$(OBJDIR)/%.check.o: $(OBJDIR)/%.check.c $(DEPDIR)/%.d
+$(OBJDIR)/%.o: $(OBJDIR)/%.c $(DEPDIR)/%.d
 	@echo C $@
 	$(COMPILE.c) $(OUTPUT_OPTION) $<
 	$(POSTCOMPILE)
@@ -131,14 +148,15 @@ $(OBJDIR)/%.log: $(OBJDIR)/%.test
 #@echo -e "\nRUNNING VALGRIND" | tee -a $@
 #CK_FORK=no valgrind -q --leak-check=full $< >> $@
 
+NEWESTSOURCE="${SRCDIR}/$(shell ls -t ${SRCDIR} | head -1)" 
 
 test: $(TESTRESULTS)
 	@echo
 	@llvm-profdata merge -sparse $(TESTDATA) -o $(OBJDIR)/default.profdata
 	@llvm-cov report --use-color -ignore-filename-regex='yxml*' --instr-profile=$(OBJDIR)/default.profdata $(OBJDIR)/odf.test $(addprefix "--object=", $(TESTBINARIES)) | sed 's/-----------------------------------------//'
 	@echo
-	@echo "Some uncovered regions (search for 0 count lines if no red):"
-	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata "${SRCDIR}/$(shell ls -t ${SRCDIR} | head -1)" --use-color --show-expansions --show-line-counts-or-regions | egrep --color=never '(\[0;41m|   \^?0)' -C 3 | head -n 25 || true
+	@echo "Some uncovered regions (search for 0 count lines if no red) in $(NEWESTSOURCE):"
+	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata $(NEWESTSOURCE) --use-color --show-expansions --show-line-counts-or-regions | egrep --color=never '(\[0;41m|   \^?0)' -C 3 | head -n 25 || true
 
 coverage:
 	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata
@@ -152,7 +170,14 @@ coverage-html: ${COVERAGEDIR}
 coverageclean:
 	@rm -f $(OBJDIR)/*.prof{raw,data} ${COVERAGEDIR}
 
+debug:
+	$(GDB) $(ARGS)
+
 .DELETE_ON_ERROR: %.o %.log
 
+info:
+	@echo $(TESTOBJS)
+
 -include $(OBJS:.o=.d)
+-include $(TESTOBJS:.o=.d)
 #include $(wildcard $(patsubst %,$(DEPDIR)/%.d,$(basename $(SRCS))))

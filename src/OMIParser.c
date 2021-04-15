@@ -2,15 +2,17 @@
 
 #include "OMIParser.h"
 #include "ParserUtils.h"
+#include "OmiConstants.h"
 
 // Parser memory pool
 OmiParser parsers[ParserPoolSize] = {{0}};
 // String storage for ids and string values
 //StringStorage stringStorage // TODO
+
 char* storeTempString(OmiParser *p, const char * str, size_t stringLength) {
     (void) p;
     size_t memoryLen = stringLength + 1; // + 1: null character
-    char* s = malloc(memoryLen); // TODO change to string storge
+    char* s = p->stringAllocator->malloc(memoryLen);
     if (s) {
         memcpy(s, str, memoryLen);
         s[stringLength] = '\0';
@@ -22,7 +24,7 @@ char* storeTempString(OmiParser *p, const char * str, size_t stringLength) {
 
 #define storeTempStringOrError(resultVariable) \
     endTempString(p); \
-    resultVariable = p->stringCallback(p, p->tempString, p->tempStringLength); \
+    resultVariable = storeTempString(p, p->tempString, p->tempStringLength); \
     if (!resultVariable) return Err_OOM_String
 
 
@@ -33,8 +35,9 @@ OmiParser* OmiParser_init(OmiParser* p, uchar connectionId) {
             .bytesRead = 0,
             .stPosition = 0,
             .tempStringLength = 0,
-            .stringCallback = &storeTempString, // TODO: change to string storage
+            .stringAllocator = &stdAllocator, // TODO: change to string storage
             .odfCallback = NULL, //odfHandler
+            .lastPath = NULL,
             .stHash = emptyPartialHash,
             .st = OmiState_PreOmiEnvelope,
             //.parameters = OmiRequestParameters_INITIALIZER(arrival
@@ -66,7 +69,7 @@ ErrorResponse OmiParser_pushPath(OmiParser* p, OdfId id, PathFlags flags) {
     if (depth >= OdfDepthLimit) return Err_TooDeepOdf;
 
     // allocates the id!
-    char * copiedId = p->stringCallback(p, id, strlen(id));
+    char * copiedId = storeTempString(p, id, strlen(id));
     Path* newPath = Path_init(p->currentOdfPath+1, depth+1, p->currentOdfPath, copiedId, flags);
     p->currentOdfPath = newPath;
     return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_Path, NULL));
@@ -196,7 +199,7 @@ static inline int processVerb(OmiParser *p, yxml_ret_t r) {
         case YXML_ATTREND:
             switch (calcHashCode(p->xmlSt.attr)) {
                 case h_msgformat:
-                    if (p->stHash.hash == h_odf)
+                    if (p->stHash.hash == (uint) h_odf)
                         p->parameters.format = OmiOdf;
                     else return Err_InvalidDataFormat;
                     break;

@@ -77,7 +77,7 @@
     OdfTree odf;
     OdfTree_init(&odf);
 
-    ck_assert_int_eq(odf.size, 0);
+    ck_assert_int_eq(odf.size, 1);
     
     //char * path = "Objects/MyObject/MyInfoItem"
     const Path* myItem = addPath(&odf, "Objects/MyObject/MyInfoItem");
@@ -130,11 +130,11 @@
 
     ck_assert_ptr_ne(myItemAgain, myMiddleItem);
 
-    const Path p0 = odf.sortedPaths[0];
-    const Path p1 = odf.sortedPaths[1];
-    const Path p2 = odf.sortedPaths[2];
-    const Path p3 = odf.sortedPaths[3];
-    const Path p4 = odf.sortedPaths[4];
+    Path p0 = odf.sortedPaths[0];
+    Path p1 = odf.sortedPaths[1];
+    Path p2 = odf.sortedPaths[2];
+    Path p3 = odf.sortedPaths[3];
+    Path p4 = odf.sortedPaths[4];
 
     ck_assert_uint_eq(p0.idHashCode, calcHashCode("Objects"));
     ck_assert_uint_eq(p1.idHashCode, calcHashCode("AnObj"));
@@ -148,6 +148,21 @@
     ck_assert_ptr_eq(p2.parent, odf.sortedPaths+1); // AnObj/MyInfoItem
     ck_assert_ptr_eq(p3.parent, odf.sortedPaths+0); // Objects/MyObject
     ck_assert_ptr_eq(p4.parent, odf.sortedPaths+3); // MyObject/MyInfoItem
+
+    // Test delete
+    removePathSegment(&odf, myMiddleItem);
+    p0 = odf.sortedPaths[0];
+    p1 = odf.sortedPaths[1];
+    p3 = odf.sortedPaths[2];
+    p4 = odf.sortedPaths[3];
+    ck_assert_ptr_eq(p0.parent, NULL);
+    ck_assert_ptr_eq(p1.parent, odf.sortedPaths+0); // Objects/AnObj
+    ck_assert_ptr_eq(p3.parent, odf.sortedPaths+0); // Objects/MyObject
+    ck_assert_ptr_eq(p4.parent, odf.sortedPaths+2); // MyObject/MyInfoItem
+
+    ck_assert_int_eq(odf.size, 4);
+    odf.capacity = 4;
+    ck_assert_ptr_eq(addPath(&odf, "Objects/MyObject/MyInfoItem2"), NULL);
 
 #test memoryOffsetProblemT
     char* expectedPath = "Objects/Object1/description";

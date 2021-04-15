@@ -17,7 +17,7 @@ int stringLen(const char * string) {
 // 
 void calcHashCodeC(const char c, PartialHash *h) {
     h->hash ^= c;
-    h->hash *= FNV_prime;
+    h->hash = h->hash * FNV_prime;
 }
 
 strhash calcHashCodeL(const char * string, int len) {
@@ -39,6 +39,7 @@ strhash calcHashCode(const char * string) {
     return hash;
 }
 
+const PartialHash emptyPartialHash = {FNV_offset_basis};
 
 // returns true if found, false if not found. returnIx contains index of found
 // or the index of the next closest element.
@@ -114,4 +115,7 @@ strhash OString_len(OString* self){
     self->length = strlen(self->data);
     return self->length;
 }
+
+static void stdNullFree(void **ptr) {free(*ptr); *ptr = NULL;}
+Allocator stdAllocator = {malloc, calloc, realloc, free, stdNullFree};
 

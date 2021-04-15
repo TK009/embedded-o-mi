@@ -1,0 +1,139 @@
+// vim: syntax=c
+#include "ConnectionHandler.h"
+#include <stdio.h>
+
+#suite ConnectionHandler
+
+char actualResponse[2048]; // max response size for tests
+char * bufferLocation = actualResponse;
+void saveActualResponse(const char * format, ...) {
+  va_list argptr;
+  va_start(argptr, format);
+  int ret = vsprintf(bufferLocation, format, argptr);
+  if (ret > 0) bufferLocation += ret;
+}
+
+Printf get(int i) {
+  (void) i;
+  return saveActualResponse;
+}
+
+#define ResetBuffer() bufferLocation = actualResponse; bufferLocation[0] = '\0'
+#define AssertResponseEquals(expected) \
+  ck_assert_str_eq(actualResponse, (expected)); \
+  ResetBuffer()
+
+#define TestValue(type, accessor, val) \
+  Path_init(&info, 3, NULL, "MyInfo", PF_IsInfoItem | PF_ValueMalloc | type); \
+  lv.current.value.accessor = val; \
+  info.value.latest = &lv; \
+  responseStartOdfNode(&p, &info)
+
+#test responseStringsT
+  connectionHandler.getPrintfForConnection = get;
+  OmiRequestParameters p = {
+    .version=OmiV2_ns,
+    .requestType = OmiRead,
+    .arrival = 1000,
+    .deadline = 1010
+    };
+  responseFullSuccess(&p);
+  AssertResponseEquals(
+    "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/2.0/\" version=\"2.0\" ttl=\"10\">"
+    "<response><result><return returnCode=\"200\"/></result></response></omiEnvelope>"); //valid
+
+  responseFullFailure(&p, 404, "Not found");
+  AssertResponseEquals(
+    "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/2.0/\" version=\"2.0\" ttl=\"10\">"
+    "<response><result><return returnCode=\"404\" description=\"Not found\"/></result></response></omiEnvelope>"); //valid
+
+  Path description;
+  Path_init(&description, 3, NULL, "description", PF_IsDescription);
+  description.value.str = "Hello?";
+  responseStartOdfNode(&p, &description);
+  AssertResponseEquals("<description>Hello?");
+  responseCloseOdfNode(&p, &description);
+  AssertResponseEquals("</description>");
+
+  Path MetaData;
+  Path_init(&MetaData, 3, NULL, "MetaData", PF_IsMetaData);
+  responseStartOdfNode(&p, &MetaData);
+  AssertResponseEquals("<MetaData>");
+  responseCloseOdfNode(&p, &MetaData);
+  AssertResponseEquals("</MetaData>");
+
+  Path Object;
+  Path_init(&Object, 3, NULL, "MyObj", 0);
+  responseStartOdfNode(&p, &Object);
+  AssertResponseEquals("<Object><id>MyObj</id>");
+  responseCloseOdfNode(&p, &Object);
+  AssertResponseEquals("</Object>");
+
+  responseStartWithObjects(&p, 200);
+  AssertResponseEquals(
+    "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/2.0/\" version=\"2.0\" ttl=\"10\">"
+    "<response><result msgformat=\"odf\"><return returnCode=\"200\"/><msg>"
+    "<Objects xmlns=\"http://www.opengroup.org/xsd/odf/2.0/\" version=\"2.0\">"
+  );
+  p.version = OmiV1_0_ns;
+  responseStartWithObjects(&p, 200);
+  AssertResponseEquals(
+    "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/1.0/\" version=\"1.0\" ttl=\"10\">"
+    "<response><result msgformat=\"odf\"><return returnCode=\"200\"/><msg>"
+    "<Objects xmlns=\"http://www.opengroup.org/xsd/odf/1.0/\" version=\"1.0\">"
+          );
+  p.version = OmiV1_ns;
+  responseStartWithObjects(&p, 200);
+  AssertResponseEquals(
+    "<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\">"
+    "<response><result msgformat=\"odf\"><return returnCode=\"200\"/><msg>"
+    "<Objects xmlns=\"odf.xsd\" version=\"1.0\">"
+          );
+  p.version = OmiV_unknown;
+  responseStartWithObjects(&p, 200);
+  AssertResponseEquals(
+    "<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\">"
+    "<response><result msgformat=\"odf\"><return returnCode=\"200\"/><msg>"
+    "<Objects xmlns=\"odf.xsd\" version=\"1.0\">"
+          );
+
+  responseEndWithObjects(&p);
+  AssertResponseEquals( "</Objects></msg></result></response></omiEnvelope>" );
+
+  Path info;
+  LatestValue lv = {.current = {.value.str = "none", .timestamp=10}};
+
+  TestValue(V_String, str, "none");
+  AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:string\">none</value>");
+  TestValue(V_Int, i, 1234);
+  AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:int\">1234</value>");
+  TestValue(V_Float, f, 12.34);
+  AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:float\">12.340000</value>");
+  TestValue(V_Double, d, 12.345678);
+  AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:double\">12.345678</value>"); // FIXME: check accuracy
+  TestValue(V_Long, l, 123456789012345678);
+  AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:long\">123456789012345678</value>");
+  TestValue(V_Short, i, (short) -1234);
+  AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:short\">-1234</value>");
+  TestValue(V_Byte, b, (char) -120);
+  AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:byte\">-120</value>");
+  TestValue(V_Boolean, i, true);
+  AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:boolean\">1</value>");
+  TestValue(V_ULong, l, 18446744073709551615ul);
+  AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:unsignedLong\">18446744073709551615</value>");
+  TestValue(V_UInt, l, 10);
+  AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:unsignedInt\">10</value>");
+  TestValue(V_UShort, l, 10);
+  AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:unsignedShort\">10</value>");
+  TestValue(V_UByte, l, 10);
+  AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:unsignedByte\">10</value>");
+  TestValue(V_ODF, str, "<Objects />");
+  AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"odf\"><Objects /></value>");
+
+
+  responseCloseOdfNode(&p, &info);
+  AssertResponseEquals("</InfoItem>");
+
+
+
+

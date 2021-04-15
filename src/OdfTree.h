@@ -7,6 +7,7 @@
 typedef const char * OdfId;
 typedef uint PathFlags;
 
+typedef struct LatestValue LatestValue;
 typedef union AnyValue {
     char b;
     float f;
@@ -15,13 +16,20 @@ typedef union AnyValue {
     int i;
     int64 l;
     char * str;
+    LatestValue * latest;
     void * obj;
 } AnyValue;
 
 typedef struct SingleValue {
     eomi_time timestamp;
+    const char * typeString; // For unknown types, enumeration is not enough
     AnyValue value;
 } SingleValue;
+
+struct LatestValue {
+    SingleValue current;
+    SingleValue upcoming;
+};
 
 // General idea is to build a prefix tree for O-DF
 // ...in other words, linked list of each Path sharing same elements
@@ -46,14 +54,19 @@ schar pathCompare(const Path* a, const Path* b);
 
 typedef struct OdfTree {
     Path sortedPaths[ODFTREE_SIZE];
+    //LatestValue latestValuesData[ODFTREE_SIZE];
     int size;
+    int capacity;
 } OdfTree;
 
 OdfTree* OdfTree_init(OdfTree* self);
+void OdfTree_destroy(OdfTree* self, Allocator* idAllocator, Allocator* valueAllocator);
 
 int odfBinarySearch(const OdfTree* tree, const Path* needle, int* resultIndex);
 
 Path* addPath(OdfTree* tree, const char newPath[]);
+Path* addPathSegment(OdfTree * tree, Path * segment);
+void removePathSegment(OdfTree * tree, const Path * segment);
 
 typedef enum ValueType {
     V_String = 0, // the default

@@ -34,8 +34,25 @@ Path* Path_init(Path* self, uchar depth, Path* parent, OdfId odfId, PathFlags fl
 }
 
 OdfTree* OdfTree_init(OdfTree* self) {
-    if (self) self->size = 0;
+    if (self) {
+        self->size = 1;
+        self->capacity = ODFTREE_SIZE;
+        Path_init(&(self->sortedPaths[0]), 1, NULL, "Objects", 0); // TODO use str constant
+    }
     return self;
+}
+void OdfTree_destroy(OdfTree* self, Allocator* stringAllocator, Allocator* valueAllocator) {
+    for (int i = 0; i < self->size; ++i) {
+        Path * p = &self->sortedPaths[i];
+        if (p->flags & PF_OdfIdMalloc)
+            stringAllocator->free((void*)p->odfId);
+        if (p->flags & PF_ValueMalloc) {
+            if (p->flags & PF_IsInfoItem)
+                valueAllocator->free(p->value.obj);
+            else
+                stringAllocator->free(p->value.str);
+        }
+    }
 }
 
 // return id
@@ -93,6 +110,16 @@ void _move(OdfTree* tree, int index) {
         tree->sortedPaths[i] = *moving;
     }
 }
+void _unmove(OdfTree* tree, int index) {
+    Path * indexPointer = tree->sortedPaths + index;
+
+    for (int i = index; i < tree->size-1; ++i) {
+        Path * moving = tree->sortedPaths+i+1;
+        if (moving->parent >= indexPointer)
+            moving->parent--;
+        tree->sortedPaths[i] = *moving;
+    }
+}
 
 Path* addPath(OdfTree* tree, const char pathString[]) {
     const char* idStart = pathString;
@@ -122,27 +149,38 @@ Path* addPath(OdfTree* tree, const char pathString[]) {
                 .flags = 0
             };
 
-            int segmentIx = 0;
-            if (odfBinarySearch(tree, &newSegment, &segmentIx)){
-                if (*current == '\0')
-                    return tree->sortedPaths + segmentIx; // found existing
-            } else {
-                // make room for new
-                _move(tree, segmentIx);
-
-                // create a new path entry
-                Path* newSegmentLoc = tree->sortedPaths + segmentIx;
-                memcpy(newSegmentLoc, &newSegment, sizeof(*newSegmentLoc));
-                tree->size++;
-            }
-
-            // local vars
+            parent = addPathSegment(tree, &newSegment);
+            if (!parent) return NULL;
             idStart = current + 1;
-            parent = &tree->sortedPaths[segmentIx];
             ++depth;
         }
     }
     return parent;
+}
+
+Path* addPathSegment(OdfTree * tree, Path * segment) {
+    if (tree->capacity <= tree->size) return NULL;
+    int resultIndex;
+    if (odfBinarySearch(tree, segment, &resultIndex)) {
+        return &tree->sortedPaths[resultIndex]; // found
+    } else {
+        // make room for new
+        _move(tree, resultIndex);
+        // create a new path entry
+        Path* newSegmentLoc = &tree->sortedPaths[resultIndex];
+        memcpy(newSegmentLoc, segment, sizeof(*newSegmentLoc));
+        tree->size++;
+        return newSegmentLoc;
+    }
+    
+}
+void removePathSegment(OdfTree * tree, const Path * segment) {
+    int resultIndex;
+    if (odfBinarySearch(tree, segment, &resultIndex)) {
+        //tree->sortedPaths[resultIndex];
+        _unmove(tree, resultIndex);
+        tree->size--;
+    }
 }
 
 

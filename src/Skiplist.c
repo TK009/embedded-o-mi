@@ -114,7 +114,7 @@ void Skiplist_del(Skiplist* slist, SkiplistEntry *condemned, SkiplistEntry * pre
     slist->alloc->free(condemned);
 }
 
-// return the (current key, replaced value) or (NULL, NULL) if new; existing keys are not replaced
+// return the (current key, replaced value), (NULL, 1) if malloc fails, or (NULL, NULL) if new; existing keys are not replaced but their values are
 Pair Skiplist_set(Skiplist* slist, void* key, void* value) {
     SkiplistEntry * prev[MAX_SKIPLIST_HEIGHT];
     SkiplistEntry * curr = slist->head;
@@ -141,6 +141,7 @@ Pair Skiplist_set(Skiplist* slist, void* key, void* value) {
 
     // Didn't find it, we need to insert a new entry
     SkiplistEntry * new_entry = slist->alloc->malloc(sizeof(SkiplistEntry));
+    if (!new_entry) return (Pair){NULL, (void*)1}; // XXX: Special return value to indicate malloc fail
     new_entry->height = grand(slist->head->height);
     new_entry->key = key;
     new_entry->value = value;

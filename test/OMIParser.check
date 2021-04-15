@@ -1,5 +1,7 @@
 // vim: syntax=c
 #include "OMIParser.h"
+#include "ParserUtils.h"
+#include "testUtils.h"
 
 char * expectedPath = "";
 OdfParserEvent expectedEvent = {PE_Path, NULL};
@@ -39,10 +41,6 @@ static ErrorResponse noopPathCb(OmiParser *p, Path *a, OdfParserEvent b) {
   if (b.data) free(b.data);
   return Err_OK;
 }
-static char* failStringCallback(OmiParser *p, const char * str, size_t len) {
-  (void) p, (void) str, (void) len;
-  return NULL;
-}
 
 #define createParser(p) \
     OmiParser p ## _allocation; \
@@ -58,14 +56,15 @@ static char* failStringCallback(OmiParser *p, const char * str, size_t len) {
 #suite OMIParser
 
 #test parserUtilsT
-    char * actual = storeTempString(NULL, "testing", 4);
-    ck_assert_str_eq(actual, "test");
-    free(actual);
 
     OmiParser pa;
     OmiParser *p = &pa;
     OmiParser_init(p, 0);
-    p->stringCallback = failStringCallback;
+    char * actual = storeTempString(p, "testing", 4);
+    ck_assert_str_eq(actual, "test");
+    p->stringAllocator->free(actual);
+
+    p->stringAllocator = &nullocator;
     p->odfCallback = noopPathCb;
     p->st = OdfState_InfoItem;
     ck_assert_int_eq(runParser(p, "<value unixTime=\"1\""), Err_OOM_String);
@@ -79,6 +78,16 @@ static char* failStringCallback(OmiParser *p, const char * str, size_t len) {
     ck_assert_int_eq(runParser(p, "<description>1</description>"), Err_OOM_String);
     p->st = OdfState_InfoItem;
     ck_assert_int_eq(runParser(p, "<value>1</value>"), Err_OOM_String);
+
+    // FIXME: Local timezone causes trouble (Helsinki: +02:00, Summer/winter time)
+    ck_assert_int_eq(parseDateTime("2019-11-28T14:34:04.419+00:00"), 1574944444);
+    ck_assert_int_eq(parseDateTime("2019-11-28T16:34:04.419+02:00"), 1574944444);
+    ck_assert_int_eq(parseDateTime("2019-11-28T14:34:04.419Z"), 1574944444);
+    ck_assert_int_eq(parseDateTime("2019-11-28T16:34:04.419+02:00"), 1574944444);
+    ck_assert_int_eq(parseDateTime("2021-03-01T00:40:46.123Z"), 1614552046);
+    ck_assert_int_eq(parseDateTime("2021-02-28T23:10:46.123-01:30"), 1614552046);
+    ck_assert_int_eq(parseDateTime("2021-04-05T16:59Z"), 1617634740);
+    ck_assert_int_eq(parseDateTime("2021-04-05T16Z"), 0);
 
 
 #test runXmlParserT

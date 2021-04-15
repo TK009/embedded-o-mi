@@ -1,0 +1,111 @@
+// vim: syntax=c
+
+#include "requestHandler.h"
+#include "StringStorage.h"
+#include "testUtils.h"
+#include "OdfTree.h"
+
+
+#suite requestHandler
+
+#test handleWriteT
+    OmiParser pa;
+    OmiParser *p = &pa;
+    OmiParser_init(p, 0);
+    p->odfCallback = handleRequestPath;
+    p->parameters.requestType = OmiWrite;
+    StringStorage_init();
+    OdfTree_init(&tree);
+    
+    ck_assert_str_eq(tree.sortedPaths[0].odfId, "Objects");
+    OmiParser_pushPath(p, "MyObject", 0);
+    ck_assert_str_eq(tree.sortedPaths[1].odfId, "MyObject");
+    OmiParser_pushPath(p, "MyItem", PF_IsInfoItem);
+    ck_assert_str_eq(tree.sortedPaths[2].odfId, "MyItem");
+    ck_assert_int_eq(tree.size, 3);
+    //handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_Path, NULL));
+
+
+    // error cases
+    Path* path;
+    OdfTree odf;
+    OdfTree_init(&odf);
+    OdfParserEvent e = OdfParserEvent(PE_Path, NULL);
+    path = addPath(&odf, "Objects/Fail");
+    stringStorage.alloc = &nullocator;
+    ck_assert_int_eq(handleWrite(p, path, e), Err_OOM_String);
+    ck_assert_int_eq(tree.size, 3);
+
+    stringStorage.alloc = &stdAllocator;
+    path = addPath(&odf, "Objects/UnknownParent/Fail2");
+    ck_assert_int_eq(handleWrite(p, path, e), Err_InternalError);
+    ck_assert_int_eq(tree.size, 3);
+
+    path = addPath(&odf, "Objects/MyObject/Fail3");
+    path->flags |= PF_IsInfoItem;
+    int freeCount = LatestValues.freeCount;
+    LatestValues.freeCount = 0;
+    ck_assert_int_eq(handleWrite(p, path, e), Err_OOM);
+    LatestValues.freeCount = freeCount;
+    ck_assert_int_eq(tree.size, 3);
+
+    path = addPath(&odf, "Objects/MyObject/Fail4");
+    tree.capacity = 3;
+    ck_assert_int_eq(handleWrite(p, path, e), Err_OOM);
+    ck_assert_int_eq(tree.size, 3);
+    tree.capacity = ODFTREE_SIZE;
+
+    path = addPath(&odf, "Objects/MyObject/Fail5");
+    e = OdfParserEvent(PE_ValueData, stra("garbage"));
+    ck_assert_int_eq(handleWrite(p, path, e), Err_InternalError);
+    ck_assert_int_eq(tree.size, 3);
+
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_RequestID, stra("garbage"))), Err_InvalidElement);
+
+    // Values
+    int resultIndex = 0;
+    path = addPath(&odf, "Objects/MyObject/description");
+    path->flags |= PF_IsDescription | PF_ValueMalloc;
+    // Quick error cases here
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueUnixTime, stra("10"))), Err_InternalError);
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueDateTime, stra("10"))), Err_InternalError);
+    // The real description
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_Path, stra("My description"))), Err_OK);
+    ck_assert(odfBinarySearch(&tree, path, &resultIndex));
+    ck_assert_str_eq(tree.sortedPaths[resultIndex].value.str, "My description");
+    
+    path = addPath(&odf, "Objects/MyObject/MyItem");
+    path->flags |= V_String | PF_IsInfoItem;
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueUnixTime, stra("1234567"))), Err_OK);
+    ck_assert(odfBinarySearch(&tree, path, &resultIndex));
+    ck_assert_int_eq(tree.sortedPaths[resultIndex].value.latest->upcoming.timestamp, 1234567);
+    // replaces the date
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueDateTime, stra("1970-01-01T12:10:10Z"))), Err_OK);
+    ck_assert_int_lt(tree.sortedPaths[resultIndex].value.latest->upcoming.timestamp, 80000); // FIXME: System timezones affect the result
+
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueType, stra("my_random_type"))), Err_OK);
+    ck_assert_int_eq(path->flags & PF_ValueType, V_String);
+
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueData, stra("my value"))), Err_OK);
+    ck_assert_str_eq(tree.sortedPaths[resultIndex].value.latest->current.value.str, "my value");
+    char * oldValue = tree.sortedPaths[resultIndex].value.latest->current.value.str;
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueData, stra("my new value"))), Err_OK);
+    ck_assert_str_eq(tree.sortedPaths[resultIndex].value.latest->current.value.str, "my new value");
+    free(oldValue); // FIXME: temporary free before handleDelete is implemented
+    free(tree.sortedPaths[resultIndex].value.latest->current.value.str);
+
+    path->flags |= V_Int | PF_IsInfoItem;
+    path->value.i = 20;
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueData, NULL)), Err_OK);
+    ck_assert_int_eq(tree.sortedPaths[resultIndex].value.latest->current.value.i, 20);
+    ck_assert(tree.sortedPaths[resultIndex].value.latest->current.value.l == 20L);
+
+
+    // misc
+    p->parameters.requestType = OmiInvalid;
+    ck_assert_int_eq(handleRequestPath(p, path, OdfParserEvent(PE_RequestID, stra("garbage"))), Err_NotImplemented);
+    
+    //Allocator latestValueFreer = (Allocator){.free = LatestValue_destroy};
+    //OdfTree_destroy(&tree, &stdAllocator, &latestValueFreer);
+    OdfTree_destroy(&tree, &stdAllocator, &LatestValuesAllocator);
+    OmiParser_destroy(p);

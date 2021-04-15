@@ -81,7 +81,7 @@
     ck_assert_int_eq(HString_compare(&strB, &strA), 1);
     ck_assert_int_eq(HString_compare(&liquid, &costarring), strcmp("liquid", "costarring"));
     void* allocated = malloc(1);
-    stdNullFree(&allocated);
+    stdAllocator.nullFree(&allocated);
     ck_assert_ptr_eq(allocated, NULL);
 
 #test OStringT

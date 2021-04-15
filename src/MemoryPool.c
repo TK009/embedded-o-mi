@@ -51,7 +51,7 @@ void* poolAlloc(MemoryPool *pool) {
 
 void* poolCAlloc(MemoryPool *pool) {
     void *p = poolAlloc(pool);
-    if (p != NULL) memset(p, 0, pool->elementSize);
+    if (p) memset(p, 0, pool->elementSize);
     return p;
 }
 

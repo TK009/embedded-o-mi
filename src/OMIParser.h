@@ -69,6 +69,7 @@ typedef enum ErrorResponse {
     Err_InternalError       = 6,
     Err_OOM_String          = 7,
     Err_OOM                 = 8,
+    Err_NotImplemented      = 9,
 } ErrorResponse;
 
 typedef enum OdfParserEventType {
@@ -78,6 +79,7 @@ typedef enum OdfParserEventType {
     PE_ValueType,
     PE_ValueData,
     PE_RequestID,
+    PE_RequestEnd,
 } OdfParserEventType;
 
 typedef struct OdfParserEvent {
@@ -92,7 +94,7 @@ typedef struct OmiParser OmiParser;
 typedef char* (*StringCallback)(OmiParser *, const char *, size_t);
 // Called at every o-df path level, return ErrorResponse. Should handle freeing of ParserEvent data
 typedef ErrorResponse (*OdfPathCallback)(OmiParser *, Path *, OdfParserEvent); 
-typedef void (*ResponseCallback)(char *content); // Send
+//typedef void (*ResponseCallback)(char *content); // Send
 
 struct OmiParser {
     uchar connectionId;
@@ -101,8 +103,10 @@ struct OmiParser {
     uint tempStringLength;
     // functions
     StringCallback stringCallback;
+    Allocator * stringAllocator;
     OdfPathCallback odfCallback;
     Path* currentOdfPath;
+    Path* lastPath;
     Path pathStack[OdfDepthLimit]; // for odfCallback
     //ResponseCallback responseCallback; // not used in parser, but can be used in other callbacks
     

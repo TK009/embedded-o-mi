@@ -19,13 +19,13 @@ int stringLen(const char * string);
 
 
 #define FNV_prime 16777619
-#define FNV_offset_basis 2166136261
+#define FNV_offset_basis -2128831035 //2166136261
 
 typedef uint strhash;
 typedef struct PartialHash {
     strhash hash;
 } PartialHash;
-static const PartialHash emptyPartialHash = {FNV_offset_basis};
+extern const PartialHash emptyPartialHash;
 
 //strhash calcHashCodeC(const char * string);
 void calcHashCodeC(const char c, PartialHash *h);
@@ -77,9 +77,7 @@ typedef const struct Allocator{
     void (*nullFree)(void **ptr);
 } Allocator;
 
-static void stdNullFree(void **ptr) {free(*ptr); *ptr = NULL;}
-
-static const Allocator stdAllocator = {malloc, calloc, realloc, free, stdNullFree};
+extern Allocator stdAllocator;
 
 #define _NEW_ARGS(T, ...) T ## _init(malloc(sizeof(T)), __VA_ARGS__)
 #define _NEW(T) T ## _init(malloc(sizeof(T)))

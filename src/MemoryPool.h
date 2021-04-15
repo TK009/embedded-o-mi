@@ -27,7 +27,7 @@ typedef struct MemoryPool {
   void* NAME ## _calloc(size_t n, size_t size) {(void) size; (void) n; return poolCAlloc(&NAME);} \
   void NAME ## _free(void *p) {poolFree(&NAME, p);} \
   void NAME ## _nullfree(void **p) {poolFree_(&NAME, p);} \
-  const Allocator NAME ## Allocator = {\
+  Allocator NAME ## Allocator = {\
       .malloc = NAME ## _alloc, \
       .calloc = NAME ## _calloc, \
       .realloc = NULL, \

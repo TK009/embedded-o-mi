@@ -5,5 +5,12 @@ if [[ $1 == "debug" ]]; then
     exit 0
 fi
 
-watch.sh 'src/* test/* Makefile' 'make test && make coverage-html'
+watch.sh 'src/* test/* Makefile' "\
+ make test && make coverage-html; \
+ make --always-make --dry-run \
+ | grep -wE 'clang' \
+ | grep -w '\-c' \
+ | jq -nR '[inputs|{directory:\".\", command:., file: match(\" [^ ]+$\").string[1:]}]' \
+ > compile_commands.json"
+
 
