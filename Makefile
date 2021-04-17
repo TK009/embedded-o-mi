@@ -148,9 +148,12 @@ $(OBJDIR)/%.log: $(OBJDIR)/%.test
 #@echo -e "\nRUNNING VALGRIND" | tee -a $@
 #CK_FORK=no valgrind -q --leak-check=full $< >> $@
 
+tags: $(SRCS)
+	ctags $(SRCDIR)
+
 NEWESTSOURCE="${SRCDIR}/$(shell ls -t ${SRCDIR} | head -1)" 
 
-test: $(TESTRESULTS)
+test: $(TESTRESULTS) tags
 	@echo
 	@llvm-profdata merge -sparse $(TESTDATA) -o $(OBJDIR)/default.profdata
 	@llvm-cov report --use-color -ignore-filename-regex='yxml*' --instr-profile=$(OBJDIR)/default.profdata $(OBJDIR)/odf.test $(addprefix "--object=", $(TESTBINARIES)) | sed 's/-----------------------------------------//'

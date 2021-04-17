@@ -4,16 +4,41 @@
 #include "StringStorage.h"
 #include "testUtils.h"
 #include "OdfTree.h"
+#include <stdio.h>
 
+char actualResponse[2048]; // max response size for tests
+char * bufferLocation = actualResponse;
+void saveActualResponse(const char * format, ...) {
+  va_list argptr;
+  va_start(argptr, format);
+  int ret = vsprintf(bufferLocation, format, argptr);
+  if (ret > 0) bufferLocation += ret;
+}
+
+Printf get(int i) {
+  (void) i;
+  return saveActualResponse;
+}
+
+#define ResetBuffer() bufferLocation = actualResponse; bufferLocation[0] = '\0'
+#define AssertResponseEquals(expected) \
+  ck_assert_str_eq(actualResponse, (expected)); \
+  ResetBuffer()
 
 #suite requestHandler
 
-#test handleWriteT
+#test handleWriteReadT
     OmiParser pa;
     OmiParser *p = &pa;
     OmiParser_init(p, 0);
     p->odfCallback = handleRequestPath;
-    p->parameters.requestType = OmiWrite;
+    p->parameters = (OmiRequestParameters){
+      .requestType = OmiWrite,
+      .version = OmiV2_ns,
+      .arrival = 1000,
+      .deadline = 1010
+      };
+    connectionHandler.getPrintfForConnection = get;
     StringStorage_init();
     OdfTree_init(&tree);
     
@@ -96,6 +121,7 @@
 
     path->flags |= V_Int | PF_IsInfoItem;
     path->value.i = 20;
+    handleWrite(p, path, OdfParserEvent(PE_ValueUnixTime, stra("1234567")));
     ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueData, NULL)), Err_OK);
     ck_assert_int_eq(tree.sortedPaths[resultIndex].value.latest->current.value.i, 20);
     ck_assert(tree.sortedPaths[resultIndex].value.latest->current.value.l == 20L);
@@ -104,8 +130,99 @@
     // misc
     p->parameters.requestType = OmiInvalid;
     ck_assert_int_eq(handleRequestPath(p, path, OdfParserEvent(PE_RequestID, stra("garbage"))), Err_NotImplemented);
-    
+
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_RequestEnd, NULL)), Err_OK);
+    AssertResponseEquals(
+      "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/2.0/\" version=\"2.0\" ttl=\"10\">"
+      "<response><result><return returnCode=\"200\"/></result></response></omiEnvelope>"); //valid
+    // Not possible at the moment but needs to be tested:
+    handleWrite(p, path, OdfParserEvent(PE_RequestEnd, stra("garbage")));
+    ResetBuffer();
+
+
+    // Read
+    path = addPath(&odf, "Objects");
+    handleRead(p, path, OdfParserEvent(PE_Path, NULL));
+    AssertResponseEquals(
+      "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/2.0/\" version=\"2.0\" ttl=\"10\">"
+      "<response><result msgformat=\"odf\"><return returnCode=\"200\"/><msg>"
+      "<Objects xmlns=\"http://www.opengroup.org/xsd/odf/2.0/\" version=\"2.0\">"
+    );
+    handleRead(p, NULL, OdfParserEvent(PE_RequestEnd, NULL));
+    AssertResponseEquals(
+      "<Object><id>MyObject</id>"
+      "<InfoItem name=\"MyItem\">"
+      "<value unixTime=\"1234567\" type=\"xs:int\">20</value></InfoItem>"
+      //"<description>My description</description>"
+      "</Object>"
+      "</Objects></msg></result></response></omiEnvelope>"
+    );
+
+    // Add one extra item at current level
+    OmiParser_popPath(p);
+    OmiParser_pushPath(p, "MyItem2", PF_IsInfoItem);
+    handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueUnixTime, stra("1234567")));
+    handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueData, stra("my value")));
+    // Add one extra object at the same level
+    OmiParser_popPath(p);
+    OmiParser_pushPath(p, "MySubObject", 0);
+    handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_Path, NULL));
+    // Add one extra object at upper level
+    OmiParser_popPath(p);
+    OmiParser_popPath(p);
+    OmiParser_pushPath(p, "MyObject2", 0);
+    handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_Path, NULL));
+    ResetBuffer();
+
+    p->lastPath = NULL;
+    path = addPath(&odf, "Objects");
+    handleRead(p, path, OdfParserEvent(PE_Path, stra("ignored")));
+    path = addPath(&odf, "Objects/MyObject");
+    handleRead(p, path, OdfParserEvent(PE_Path, NULL));
+    path = addPath(&odf, "Objects/MyObject/MyItem");
+    handleRead(p, path, OdfParserEvent(PE_Path, NULL));
+    path = addPath(&odf, "Objects/MyObject2");
+    handleRead(p, path, OdfParserEvent(PE_Path, NULL));
+    handleRead(p, NULL, OdfParserEvent(PE_RequestEnd, stra("ignored")));
+    AssertResponseEquals(
+      "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/2.0/\" version=\"2.0\" ttl=\"10\">"
+      "<response><result msgformat=\"odf\"><return returnCode=\"200\"/><msg>"
+      "<Objects xmlns=\"http://www.opengroup.org/xsd/odf/2.0/\" version=\"2.0\">"
+      "<Object><id>MyObject</id>"
+      "<InfoItem name=\"MyItem\">"
+      "<value unixTime=\"1234567\" type=\"xs:int\">20</value></InfoItem>"
+      "</Object>"
+      "</Objects></msg></result></response></omiEnvelope>"
+    );
+
+    //poll request, via handleRequestPath
+    p->parameters.requestType = OmiRead;
+    ck_assert_int_eq(handleRequestPath(p, NULL, OdfParserEvent(PE_RequestID, stra("ignored"))), Err_NotImplemented);
+    // invalid event
+    ck_assert_int_eq(handleRead(p, NULL, OdfParserEvent(PE_ValueData, stra("ignored"))), Err_InternalError);
+
+    //description
+    p->lastPath = NULL;
+    path = addPath(&odf, "Objects");
+    handleRead(p, path, OdfParserEvent(PE_Path, stra("ignored")));
+    path = addPath(&odf, "Objects/MyObject");
+    handleRead(p, path, OdfParserEvent(PE_Path, NULL));
+    path = addPath(&odf, "Objects/MyObject/description");
+    handleRead(p, path, OdfParserEvent(PE_Path, NULL));
+    handleRead(p, NULL, OdfParserEvent(PE_RequestEnd, stra("ignored")));
+    AssertResponseEquals(
+      "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/2.0/\" version=\"2.0\" ttl=\"10\">"
+      "<response><result msgformat=\"odf\"><return returnCode=\"200\"/><msg>"
+      "<Objects xmlns=\"http://www.opengroup.org/xsd/odf/2.0/\" version=\"2.0\">"
+      "<Object><id>MyObject</id>"
+      "<description>My description</description>"
+      "</Object>"
+      "</Objects></msg></result></response></omiEnvelope>"
+    );
+
+
     //Allocator latestValueFreer = (Allocator){.free = LatestValue_destroy};
     //OdfTree_destroy(&tree, &stdAllocator, &latestValueFreer);
     OdfTree_destroy(&tree, &stdAllocator, &LatestValuesAllocator);
     OmiParser_destroy(p);
+

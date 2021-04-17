@@ -170,6 +170,7 @@ void responseStartOdfNode(const OmiRequestParameters * p, const Path *node){
             }
             break;
         default: // Object
+            if (node->depth == 1) break; // handled elsewhere, in start with objects
             send("<"); send(s_Object); send("><"); send(s_id); send(">");
             send(node->odfId); send("</"); send(s_id); send(">");
             break;
@@ -188,6 +189,7 @@ void responseCloseOdfNode(const OmiRequestParameters * p, const Path *node){
             send("</"); send(s_InfoItem); send(">");
             break;
         default:
+            if (node->depth == 1) break; // handled elsewhere, in start with objects
             send("</"); send(s_Object); send(">");
             break;
     }

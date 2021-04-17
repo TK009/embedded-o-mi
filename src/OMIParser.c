@@ -240,6 +240,7 @@ static inline int processResponse(OmiParser *p, yxml_ret_t r){
             break;
         case YXML_ELEMEND:
             p->st = OdfState_End;
+            p->odfCallback(p, NULL, OdfParserEvent(PE_RequestEnd,NULL));
             break;
         default: break;
     }
@@ -322,7 +323,7 @@ static inline int processObjects(OmiParser *p, yxml_ret_t r){
         requireTag(Object, OdfState_Object);
     }
     // TODO: parse attributes as metadata
-    return 0;
+    return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_Path, NULL));
 }
 static inline int processObject(OmiParser *p, yxml_ret_t r){
     switch (r) {
@@ -411,6 +412,7 @@ static inline int processObjectObjects(OmiParser *p, yxml_ret_t r){
         case YXML_ELEMEND:
             if (p->currentOdfPath->depth == 1){
                 p->st = OdfState_End;
+                p->odfCallback(p, NULL, OdfParserEvent(PE_RequestEnd,NULL));
             } else {
                 OmiParser_popPath(p);
             }

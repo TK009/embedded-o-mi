@@ -2,3 +2,6 @@ obj/
 bin/
 compile_commands.json
 *.profraw
+.ccls-cache
+__pycache__
+tags

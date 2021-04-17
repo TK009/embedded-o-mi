@@ -140,16 +140,46 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
             if (event.data) p->stringAllocator->free(event.data);
             return Err_InvalidElement; // actually invalid
         case PE_RequestEnd:
-            if (p->lastPath) responseFullSuccess(&p->parameters);
+            responseFullSuccess(&p->parameters); // TODO: error cases: empty write? ...
             if (event.data) p->stringAllocator->free(event.data);
             return Err_OK;
     }
     return Err_OK;
 }
-ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event) {
-    Path* storedPathSegment = NULL;
+void sendSubtree(OmiParser * p, Path * root, Path * next){
     Path* currentPath = NULL;
-    Path* lastResponsePath = NULL;
+    // leaf; recursively respond the subtree
+    Path * lastResponsePath = root;
+    int resultIndex;
+    if(odfBinarySearch(&tree, root, &resultIndex)) {
+        for (int i = resultIndex+1; i < tree.size; ++i) {
+            currentPath = &tree.sortedPaths[i];
+            // Back to same level as root; stop
+            if (currentPath->depth <= root->depth) break;
+            // Go up a level
+            if (currentPath->depth <= lastResponsePath->depth)
+                responseCloseOdfNode(&p->parameters, lastResponsePath);
+            // Descriptions in wrong place so just remove them unless specifically requested (root=leaf)
+            if ((currentPath->flags & (PF_IsDescription | PF_IsMetaData)) == 0
+                    || currentPath->hashCode == root->hashCode) {
+                // Go down a level
+                responseStartOdfNode(&p->parameters, currentPath);
+            }
+            lastResponsePath = currentPath;
+        }
+    }
+    // close the non-common parents between last (request or response) and current/next (request) path 
+    while (lastResponsePath->depth > next->depth) {
+        // Descriptions in wrong place so just remove them unless specifically requested (root=leaf)
+        if ((lastResponsePath->flags & (PF_IsDescription | PF_IsMetaData)) == 0
+                || lastResponsePath->hashCode == root->hashCode) {
+            responseCloseOdfNode(&p->parameters, lastResponsePath);
+        }
+        lastResponsePath = lastResponsePath->parent;
+    }
+}
+ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event) {
+    Path* next = NULL;
     int resultIndex;
     //const char * tmpStr;
     switch (event.type) {
@@ -158,35 +188,19 @@ ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event) {
             // Needs to know what and how many elements to close
             //   if end: close remaining last.parents
             if (odfBinarySearch(&tree, path, &resultIndex)) {
-                storedPathSegment = &tree.sortedPaths[resultIndex];
+                next = &tree.sortedPaths[resultIndex];
                 // check if first event: response needs to be started
                 if (! p->lastPath) responseStartWithObjects(&p->parameters, 200);
 
                 // Was the last path a leaf? Not leaf if last is a parent of current
-                if (p->lastPath != storedPathSegment->parent) {
-                    // leaf; recursively respond the subtree
-                    lastResponsePath = p->lastPath;
-                    if(odfBinarySearch(&tree, p->lastPath, &resultIndex)) {
-                        for (int i = resultIndex+1; i < tree.size; ++i) {
-                            currentPath = &tree.sortedPaths[i];
-                            if (currentPath->depth >= p->lastPath->depth) break;
-                            if (currentPath->depth <= lastResponsePath->depth)
-                                responseCloseOdfNode(&p->parameters, lastResponsePath);
-                            responseStartOdfNode(&p->parameters, currentPath);
-                            lastResponsePath = currentPath;
-                        }
-                    }
-                    // close the non-common parents between last (request or response) and current/next (request) path 
-                    while (lastResponsePath->depth < storedPathSegment->depth) {
-                        responseCloseOdfNode(&p->parameters, currentPath);
-                        lastResponsePath = lastResponsePath->parent;
-                    }
+                if (p->lastPath != next->parent) {
+                    sendSubtree(p, p->lastPath, next);
                 } else {
                     // not a leaf; add the node to the response already
-                    responseStartOdfNode(&p->parameters, storedPathSegment);
+                    responseStartOdfNode(&p->parameters, next);
                 }
 
-                p->lastPath = storedPathSegment;
+                p->lastPath = next;
             }
             if (event.data) p->stringAllocator->free(event.data);
             return Err_OK;
@@ -194,7 +208,10 @@ ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event) {
             if (event.data) p->stringAllocator->free(event.data);
             return Err_NotImplemented;
         case PE_RequestEnd:
-            if (p->lastPath) responseEndWithObjects(&p->parameters);
+            if (p->lastPath) {
+                sendSubtree(p, p->lastPath, &tree.sortedPaths[0]);
+                responseEndWithObjects(&p->parameters);
+            }
             if (event.data) p->stringAllocator->free(event.data);
             return Err_OK;
         default:
