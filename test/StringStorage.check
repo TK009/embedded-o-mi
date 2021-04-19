@@ -1,4 +1,6 @@
 // vim: syntax=c
+#include "utils.h"
+extern Allocator stringStorageEntriesAllocator;
 #include "StringStorage.h"
 #include "testUtils.h"
 
@@ -47,6 +49,11 @@
   freeString("hello");
   ck_assert(!stringExists("hello"));
   //ck_assert_ptr_eq(, NULL);
+
+
+  // Unintended use, but test nullfree function to get coverage
+  SkiplistEntry * freeTest = stringStorageEntriesAllocator.malloc(1);
+  stringStorageEntriesAllocator.nullFree((void **)&freeTest);
 
 
   Skiplist_destroy(&stringStorage);

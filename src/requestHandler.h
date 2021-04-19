@@ -20,4 +20,5 @@ ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event);
 // parameters: connectionId, content?
 typedef void (*ResponseCallback)(int, const char *);
 
+
 #endif

@@ -26,10 +26,7 @@ typedef struct SingleValue {
     AnyValue value;
 } SingleValue;
 
-struct LatestValue {
-    SingleValue current;
-    SingleValue upcoming;
-};
+
 
 // General idea is to build a prefix tree for O-DF
 // ...in other words, linked list of each Path sharing same elements
@@ -50,7 +47,6 @@ Path* Path_init(Path* self, uchar depth, Path* parent, OdfId odfId, PathFlags fl
 schar pathCompare(const Path* a, const Path* b);
 
 //Path mkPath(char* pathString);
-
 
 typedef struct OdfTree {
     Path sortedPaths[ODFTREE_SIZE];

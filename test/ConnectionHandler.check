@@ -6,11 +6,12 @@
 
 char actualResponse[2048]; // max response size for tests
 char * bufferLocation = actualResponse;
-void saveActualResponse(const char * format, ...) {
+int saveActualResponse(const char * format, ...) {
   va_list argptr;
   va_start(argptr, format);
   int ret = vsprintf(bufferLocation, format, argptr);
   if (ret > 0) bufferLocation += ret;
+  return ret;
 }
 
 Printf get(int i) {
@@ -42,7 +43,7 @@ Printf get(int i) {
       "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/2.0/\" version=\"2.0\" ttl=\"10\">"
       "<response><result><return returnCode=\"200\"/></result></response></omiEnvelope>"); //valid
   
-    responseFullFailure(&p, 404, "Not found");
+    responseFullFailure(&p, 404, "Not found", NULL);
     AssertResponseEquals(
       "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/2.0/\" version=\"2.0\" ttl=\"10\">"
       "<response><result><return returnCode=\"404\" description=\"Not found\"/></result></response></omiEnvelope>"); //valid

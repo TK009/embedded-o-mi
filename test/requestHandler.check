@@ -8,11 +8,12 @@
 
 char actualResponse[2048]; // max response size for tests
 char * bufferLocation = actualResponse;
-void saveActualResponse(const char * format, ...) {
+int saveActualResponse(const char * format, ...) {
   va_list argptr;
   va_start(argptr, format);
   int ret = vsprintf(bufferLocation, format, argptr);
   if (ret > 0) bufferLocation += ret;
+  return 0;
 }
 
 Printf get(int i) {
@@ -41,8 +42,15 @@ Printf get(int i) {
     connectionHandler.getPrintfForConnection = get;
     StringStorage_init();
     OdfTree_init(&tree);
+    Path* path;
+    OdfTree odf;
+    OdfTree_init(&odf);
+    OdfParserEvent e = OdfParserEvent(PE_Path, NULL);
     
     ck_assert_str_eq(tree.sortedPaths[0].odfId, "Objects");
+    path = addPath(&odf, "Objects");
+    ck_assert_int_eq(handleWrite(p, path, e), Err_OK);
+    
     OmiParser_pushPath(p, "MyObject", 0);
     ck_assert_str_eq(tree.sortedPaths[1].odfId, "MyObject");
     OmiParser_pushPath(p, "MyItem", PF_IsInfoItem);
@@ -52,10 +60,6 @@ Printf get(int i) {
 
 
     // error cases
-    Path* path;
-    OdfTree odf;
-    OdfTree_init(&odf);
-    OdfParserEvent e = OdfParserEvent(PE_Path, NULL);
     path = addPath(&odf, "Objects/Fail");
     stringStorage.alloc = &nullocator;
     ck_assert_int_eq(handleWrite(p, path, e), Err_OOM_String);
@@ -195,15 +199,14 @@ Printf get(int i) {
       "</Objects></msg></result></response></omiEnvelope>"
     );
 
-    //poll request, via handleRequestPath
+    // invalid event, via handleRequestPath
     p->parameters.requestType = OmiRead;
-    ck_assert_int_eq(handleRequestPath(p, NULL, OdfParserEvent(PE_RequestID, stra("ignored"))), Err_NotImplemented);
-    // invalid event
-    ck_assert_int_eq(handleRead(p, NULL, OdfParserEvent(PE_ValueData, stra("ignored"))), Err_InternalError);
+    ck_assert_int_eq(handleRequestPath(p, NULL, OdfParserEvent(PE_ValueData, stra("ignored"))), Err_InternalError);
 
     //description
     p->lastPath = NULL;
     path = addPath(&odf, "Objects");
+    // via handleRequestPath
     handleRead(p, path, OdfParserEvent(PE_Path, stra("ignored")));
     path = addPath(&odf, "Objects/MyObject");
     handleRead(p, path, OdfParserEvent(PE_Path, NULL));

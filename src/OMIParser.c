@@ -3,6 +3,7 @@
 #include "OMIParser.h"
 #include "ParserUtils.h"
 #include "OmiConstants.h"
+#include "requestHandler.h"
 
 // Parser memory pool
 OmiParser parsers[ParserPoolSize] = {{0}};
@@ -36,7 +37,7 @@ OmiParser* OmiParser_init(OmiParser* p, uchar connectionId) {
             .stPosition = 0,
             .tempStringLength = 0,
             .stringAllocator = &stdAllocator, // TODO: change to string storage
-            .odfCallback = NULL, //odfHandler
+            .odfCallback = handleRequestPath, //odfHandler
             .lastPath = NULL,
             .stHash = emptyPartialHash,
             .st = OmiState_PreOmiEnvelope,
@@ -70,6 +71,7 @@ ErrorResponse OmiParser_pushPath(OmiParser* p, OdfId id, PathFlags flags) {
 
     // allocates the id!
     char * copiedId = storeTempString(p, id, strlen(id));
+    if (!copiedId) return Err_OOM;
     Path* newPath = Path_init(p->currentOdfPath+1, depth+1, p->currentOdfPath, copiedId, flags);
     p->currentOdfPath = newPath;
     return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_Path, NULL));
@@ -240,8 +242,7 @@ static inline int processResponse(OmiParser *p, yxml_ret_t r){
             break;
         case YXML_ELEMEND:
             p->st = OdfState_End;
-            p->odfCallback(p, NULL, OdfParserEvent(PE_RequestEnd,NULL));
-            break;
+            return p->odfCallback(p, NULL, OdfParserEvent(PE_RequestEnd,NULL));
         default: break;
     }
     return 0;
@@ -310,6 +311,7 @@ static inline int processMsg(OmiParser *p, yxml_ret_t r){
     if (p->parameters.format == OmiOdf) {
         if (r == YXML_ELEMSTART) {
             requireTag(Objects, OdfState_Objects);
+            return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_Path, NULL));
         }
     }
     //else { // Error returned earlier when reading message format
@@ -321,9 +323,12 @@ static inline int processObjects(OmiParser *p, yxml_ret_t r){
     // TODO parse version
     if (r == YXML_ELEMSTART) {
         requireTag(Object, OdfState_Object);
+    } else if (r == YXML_ELEMEND) {
+        p->st = OdfState_End;
+        return p->odfCallback(p, NULL, OdfParserEvent(PE_RequestEnd,NULL));
     }
     // TODO: parse attributes as metadata
-    return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_Path, NULL));
+    return 0;
 }
 static inline int processObject(OmiParser *p, yxml_ret_t r){
     switch (r) {
@@ -412,7 +417,7 @@ static inline int processObjectObjects(OmiParser *p, yxml_ret_t r){
         case YXML_ELEMEND:
             if (p->currentOdfPath->depth == 1){
                 p->st = OdfState_End;
-                p->odfCallback(p, NULL, OdfParserEvent(PE_RequestEnd,NULL));
+                return p->odfCallback(p, NULL, OdfParserEvent(PE_RequestEnd,NULL));
             } else {
                 OmiParser_popPath(p);
             }
@@ -428,15 +433,14 @@ static inline int processDescription(OmiParser *p, yxml_ret_t r){
             break;
         case YXML_ELEMEND:
             storeTempStringOrError(descriptionString);
-            p->odfCallback(p,
-                    Path_init(p->currentOdfPath+1, p->currentOdfPath->depth+1, p->currentOdfPath, s_description, PF_IsDescription),
-                    OdfParserEvent(PE_Path, descriptionString));
-
             if (p->currentOdfPath->flags & PF_IsInfoItem)
                 p->st = OdfState_InfoItem;
             else // if (inside object)
                 p->st = OdfState_ObjectInfoItems;
-            break;
+
+            return p->odfCallback(p,
+                    Path_init(p->currentOdfPath+1, p->currentOdfPath->depth+1, p->currentOdfPath, s_description, PF_IsDescription),
+                    OdfParserEvent(PE_Path, descriptionString));
         case YXML_ELEMSTART: // not allowed
             return Err_InvalidElement;
         default: break;
@@ -471,6 +475,7 @@ static inline int processInfoItem(OmiParser *p, yxml_ret_t r){
                     p->st = OdfState_MetaData;
                     return OmiParser_pushPath(p, s_MetaData, PF_IsMetaData);
                 case h_value:
+                    initTempString(p); // zero for content in case no attrs before value.
                     p->st = OdfState_Value;
                     break;
                 default:
@@ -642,7 +647,12 @@ ErrorResponse runParser(OmiParser * p, char * inputChunk) {
                 return Err_InternalError;
             case OmiState_PreOmiEnvelope:
                 if (r == YXML_ELEMSTART){
-                    requireTag(omiEnvelope, OmiState_OmiEnvelope);
+                    // commented because this state is used to recover errors
+                    //requireTag(omiEnvelope, OmiState_OmiEnvelope);
+                    // FIXME: will cause problems if data contains omiEnvelope after error
+                    if (elementEquals(omiEnvelope)) {
+                        p->st = OmiState_OmiEnvelope;
+                    }
                 }
                 break;
             case OmiState_OmiEnvelope:

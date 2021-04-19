@@ -1,0 +1,17 @@
+<omiEnvelope xmlns="http://www.opengroup.org/xsd/omi/1.0/" version="1.0" ttl="10">
+  <write msgformat="odf">
+    <msg>
+      <Objects xmlns="http://www.opengroup.org/xsd/odf/1.0/">
+        <Object>
+          <id>OMI-Service</id>
+          <Object>
+            <id>Settings</id>
+            <InfoItem name="num-latest-values-stored">
+              <value>1</value>
+            </InfoItem>
+          </Object>
+        </Object>
+      </Objects>
+    </msg>
+  </write>
+</omiEnvelope>

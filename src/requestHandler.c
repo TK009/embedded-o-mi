@@ -24,6 +24,7 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
     const char * tmpStr;
     switch (event.type) {
         case PE_Path:
+            if (!path->parent) return Err_OK; // Objects
             storedPathSegment = addPathSegment(&tree, path);
             if (!storedPathSegment) return Err_OOM;
             storedPathSegment->odfId = storeString(path->odfId);
@@ -146,7 +147,21 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
     }
     return Err_OK;
 }
-void sendSubtree(OmiParser * p, Path * root, Path * next){
+
+typedef void (*NodeFunction)(OmiRequestParameters*, Path*, void*);
+void respOpen(OmiRequestParameters* p, Path* path, void* extra){
+    (void) extra;
+    responseStartOdfNode(p, path);
+}
+void respClose(OmiRequestParameters* p, Path* path, void* extra){
+    (void) extra;
+    responseCloseOdfNode(p, path);
+}
+void noopCb(OmiRequestParameters* p, Path* n, void* e){
+    (void) p, (void) n, (void) e;
+}
+void odfSubtree(OmiParser * p, Path * root, Path * next,
+        NodeFunction open, NodeFunction close, void* param){
     Path* currentPath = NULL;
     // leaf; recursively respond the subtree
     Path * lastResponsePath = root;
@@ -158,12 +173,12 @@ void sendSubtree(OmiParser * p, Path * root, Path * next){
             if (currentPath->depth <= root->depth) break;
             // Go up a level
             if (currentPath->depth <= lastResponsePath->depth)
-                responseCloseOdfNode(&p->parameters, lastResponsePath);
+                close(&p->parameters, lastResponsePath, param);
             // Descriptions in wrong place so just remove them unless specifically requested (root=leaf)
             if ((currentPath->flags & (PF_IsDescription | PF_IsMetaData)) == 0
                     || currentPath->hashCode == root->hashCode) {
                 // Go down a level
-                responseStartOdfNode(&p->parameters, currentPath);
+                open(&p->parameters, currentPath, param);
             }
             lastResponsePath = currentPath;
         }
@@ -173,15 +188,44 @@ void sendSubtree(OmiParser * p, Path * root, Path * next){
         // Descriptions in wrong place so just remove them unless specifically requested (root=leaf)
         if ((lastResponsePath->flags & (PF_IsDescription | PF_IsMetaData)) == 0
                 || lastResponsePath->hashCode == root->hashCode) {
-            responseCloseOdfNode(&p->parameters, lastResponsePath);
+            close(&p->parameters, lastResponsePath, param);
         }
         lastResponsePath = lastResponsePath->parent;
     }
 }
+
+
+CreateStaticMemoryPool(HandlerInfo, HandlerInfoPool, 4)
+
+void addSubscription(OmiRequestParameters* p, Path* path, void* param) {
+    (void) p;
+    HandlerInfo * subInfo = param;
+    // prepend the list to reuse the parent list on children, while children can have more items
+    HandlerInfo ** currentHandler = &(path->value.latest->writeHandler);
+    if (*currentHandler) {
+        // TODO: allocate here if next pointer needs to be different. Add a hashcode?
+        //if () subInfo = poolAlloc(&HandlerInfoPool);
+        subInfo->another = *currentHandler;
+        *currentHandler = subInfo;
+    }
+    else *currentHandler = (HandlerInfo *) subInfo;
+}
+
+
 ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event) {
     Path* next = NULL;
     int resultIndex;
-    //const char * tmpStr;
+    NodeFunction open, close;
+    HandlerInfo subInfo;
+
+    if (p->parameters.requestType == OmiRead) {
+        open = respOpen;
+        close = respClose;
+    } else if (p->parameters.requestType == OmiSubscribe && p->parameters.interval == -1) {
+        open = addSubscription;
+        close = noopCb;
+        //subInfo = (HandlerInfo){}; // TODO: this is a template for callbacks
+    }
     switch (event.type) {
         case PE_Path:
             // TODO: response
@@ -194,7 +238,7 @@ ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event) {
 
                 // Was the last path a leaf? Not leaf if last is a parent of current
                 if (p->lastPath != next->parent) {
-                    sendSubtree(p, p->lastPath, next);
+                    odfSubtree(p, p->lastPath, next, respOpen, respClose, &subInfo);
                 } else {
                     // not a leaf; add the node to the response already
                     responseStartOdfNode(&p->parameters, next);
@@ -204,12 +248,9 @@ ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event) {
             }
             if (event.data) p->stringAllocator->free(event.data);
             return Err_OK;
-        case PE_RequestID: // Poll request
-            if (event.data) p->stringAllocator->free(event.data);
-            return Err_NotImplemented;
         case PE_RequestEnd:
             if (p->lastPath) {
-                sendSubtree(p, p->lastPath, &tree.sortedPaths[0]);
+                odfSubtree(p, p->lastPath, &tree.sortedPaths[0], respOpen, respClose, &subInfo);
                 responseEndWithObjects(&p->parameters);
             }
             if (event.data) p->stringAllocator->free(event.data);
@@ -219,6 +260,23 @@ ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event) {
             return Err_InternalError;
     }
 }
+
+
+// Use read handler because of identical access pattern
+//ErrorResponse handleSubscription(OmiParser *p, Path *path, OdfParserEvent event) {
+//    Path* next = NULL;
+//    int resultIndex;
+//    switch (event.type) {
+//        case PE_Path:
+//            break;
+//        case PE_RequestEnd:
+//            break;
+//        default:
+//            if (event.data) p->stringAllocator->free(event.data);
+//            return Err_InternalError;
+//    }
+//    return 0;
+//}
 
 ErrorResponse handleRequestPath(OmiParser *p, Path *path, OdfParserEvent event) {
     switch (p->parameters.requestType) {

@@ -3,8 +3,9 @@
 
 #include "OMI.h"
 #include "OdfTree.h"
+#include "OMIParser.h"
 
-typedef void (*Printf)(const char*, ...);
+typedef int (*Printf)(const char*, ...);
 typedef struct ConnectionHandler {
     Printf (*getPrintfForConnection)(int);
     //size_t stringBufferLen;
@@ -15,9 +16,11 @@ extern ConnectionHandler connectionHandler;
 
 void responseStartWithObjects(const OmiRequestParameters * param, int returnCode);
 void responseFullSuccess(const OmiRequestParameters * param);
-void responseFullFailure(const OmiRequestParameters * param, int returnCode, const char * description);
+void responseFullFailure(const OmiRequestParameters * p, int returnCode,
+        const char * description, OmiParser * parser);
 void responseStartOdfNode(const OmiRequestParameters * param, const Path *node);
 void responseCloseOdfNode(const OmiRequestParameters * param, const Path *node);
 void responseEndWithObjects(const OmiRequestParameters * p);
+void responseFromErrorCode(OmiParser* parser, ErrorResponse err);
 
 #endif

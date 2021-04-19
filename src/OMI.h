@@ -33,11 +33,11 @@ typedef enum OmiRequestType {
 } OmiRequestType;
 
 typedef struct OmiRequestParameters {
+    OmiPayloadFormat format;
     OmiRequestType requestType;
+    OmiVersion version;
     eomi_time arrival;
     eomi_time deadline;
-    OmiVersion version;
-    OmiPayloadFormat format;
     float interval;
     char* callbackAddr;
     int connectionId; // Opened connection for either immediate response or callback

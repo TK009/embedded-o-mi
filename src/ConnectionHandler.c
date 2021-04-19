@@ -1,5 +1,6 @@
 #include "ConnectionHandler.h"
 #include "OmiConstants.h"
+#include <stdio.h>
 
 ConnectionHandler connectionHandler = {NULL, ""};
 
@@ -46,7 +47,7 @@ void responseStart(const OmiRequestParameters * p, bool hasOdf){
     send(s_version); send("=\"");
     send(omiVersionNumStr(p->version));
     send("\" ");
-    send(s_ttl); send("=\"%.1d\">", p->deadline - p->arrival);
+    send(s_ttl); send("=\"%d\">", p->deadline - p->arrival);
     send("<"); send(s_response); send(">");
     send("<"); send(s_result);
     if (hasOdf) {
@@ -118,9 +119,72 @@ void responseFullSuccess(const OmiRequestParameters * p){
     responseReturnCode(p, 200, NULL);
     responseEnd(p);
 }
-void responseFullFailure(const OmiRequestParameters * p, int returnCode, const char * description){
+void responseFullFailure(const OmiRequestParameters * p, int returnCode,
+        const char * description, OmiParser * parser){
     responseStart(p, false);
-    responseReturnCode(p, returnCode, description);
+    char d[100];
+    if (parser) {
+        switch (parser->st) {
+            case OmiState_PreOmiEnvelope:
+                sprintf(d, "%s; Near %s", description, s_omiEnvelope);
+                break;
+            case OmiState_OmiEnvelope:
+                sprintf(d, "%s; Near %s", description, s_omiEnvelope);
+                break;
+            case OmiState_Verb:
+                sprintf(d, "%s; Near request element", description);
+                break;
+            case OmiState_Response:
+                sprintf(d, "%s; Near %s", description, s_response);
+                break;
+            case OmiState_Result:
+                sprintf(d, "%s; Near %s", description, s_result);
+                break;
+            case OmiState_RequestID:
+                sprintf(d, "%s; Near %s", description, s_requestID);
+                break;
+            case OmiState_Return:
+                sprintf(d, "%s; Near %s", description, s_return);
+                break;
+            case OmiState_Msg:
+                sprintf(d, "%s; Near %s", description, s_msg);
+                break;
+            case OdfState_Objects:
+                sprintf(d, "%s; Near %s", description, s_Objects);
+                break;
+            case OdfState_Object:
+                sprintf(d, "%s; Near %s %s", description, s_Object, parser->currentOdfPath->odfId);
+                break;
+            case OdfState_Id:
+                sprintf(d, "%s; Near %s in %s", description, s_id, parser->currentOdfPath->odfId);
+                break;
+            case OdfState_ObjectObjects:
+                sprintf(d, "%s; Near %s, %s children", description, parser->currentOdfPath->odfId, s_Object);
+                break;
+            case OdfState_ObjectInfoItems:
+                sprintf(d, "%s; Near %s, %s children", description, parser->currentOdfPath->odfId, s_InfoItem);
+                break;
+            case OdfState_InfoItem:
+                sprintf(d, "%s; Near %s %s", description, s_InfoItem, parser->currentOdfPath->odfId);
+                break;
+            case OdfState_Description:
+                sprintf(d, "%s; Near %s of %s", description, s_description, parser->currentOdfPath->odfId);
+                break;
+            case OdfState_MetaData:
+                sprintf(d, "%s; Near %s of %s", description, s_MetaData, parser->currentOdfPath->parent->odfId);
+                break;
+            case OdfState_Value:
+                sprintf(d, "%s; Near %s of %s", description, s_value, parser->currentOdfPath->odfId);
+                break;
+            default:
+                strcpy(d, description);
+        }
+
+    } else {
+        strcpy(d, description);
+    }
+    
+    responseReturnCode(p, returnCode, d);
     responseEnd(p);
 }
 #define caseResponseValue(typeEnum, typeString, stringSpecifier, accessor) \
@@ -191,6 +255,51 @@ void responseCloseOdfNode(const OmiRequestParameters * p, const Path *node){
         default:
             if (node->depth == 1) break; // handled elsewhere, in start with objects
             send("</"); send(s_Object); send(">");
+            break;
+    }
+}
+
+void responseFromErrorCode(OmiParser* parser, ErrorResponse err){
+    const OmiRequestParameters * p = &parser->parameters;
+    switch (err) {
+        case Err_OK:
+        case Err_End:
+            break;
+        case Err_NonMatchingCloseTag:
+            responseFullFailure(p, 400, "Non matching close tag", parser);
+            break;
+        case Err_StackOverflow      :
+            responseFullFailure(p, 500, "XML parser stack overflow, too deep structure", parser);
+            break;
+        case Err_XmlError           :
+            responseFullFailure(p, 400, "XML error", parser);
+            break;
+        case Err_InvalidCharRef     :
+            responseFullFailure(p, 400, "Invalid XML character reference", parser);
+            break;
+        case Err_InvalidElement     :
+            responseFullFailure(p, 400, "Invalid O-MI/O-DF element", parser);
+            break;
+        case Err_InvalidDataFormat  :
+            responseFullFailure(p, 400, "Invalid O-MI payload type or not implemented", parser);
+            break;
+        case Err_InvalidAttribute   :
+            responseFullFailure(p, 400, "Invalid O-MI/O-DF element attribute", parser);
+            break;
+        case Err_TooDeepOdf         :
+            responseFullFailure(p, 500, "O-DF parser stack overflow, too deep hierarchy", parser);
+            break;
+        case Err_InternalError      :
+            responseFullFailure(p, 500, "Internal error", parser);
+            break;
+        case Err_OOM_String         :
+            responseFullFailure(p, 500, "Out of text memory", parser);
+            break;
+        case Err_OOM                :
+            responseFullFailure(p, 500, "Out of memory", parser);
+            break;
+        case Err_NotImplemented     :
+            responseFullFailure(p, 501, "Not implemented", parser);
             break;
     }
 }

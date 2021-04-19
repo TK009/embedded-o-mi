@@ -150,4 +150,25 @@ yxml_ret_t runXmlParser(OmiParser * p, char ** inputChunkP, uint maxBytes);
 
 OmiVersion parseOmiVersion(strhash xmlns);
 
+typedef enum HandlerType {
+    HT_Subscription, HT_InternalFunction, HT_Script
+} HandlerType;
+typedef struct HandlerInfo HandlerInfo;
+struct HandlerInfo {
+    HandlerType handlerType;
+    OdfPathCallback handler;
+    OmiRequestParameters callbackInfo; // use union of OmiParameters/ScriptInfo?
+    HandlerInfo * another;
+};
+
+struct LatestValue {
+    SingleValue current;
+    SingleValue upcoming;
+    // event sub, internal function, script
+    HandlerInfo * writeHandler;
+    HandlerInfo * readHandler;
+    //OdfPathCallback writeHandler;
+    //OdfPathCallback readHandler;
+};
+
 #endif

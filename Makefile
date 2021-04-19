@@ -32,6 +32,7 @@ SRCS += $(shell find $(SRCDIR)/ -name '*.py')
 TESTSRCS = $(shell find $(TESTDIR)/ -name '*.check')
 OBJS := $(addsuffix .o,$(basename $(SRCS)))
 OBJS := $(OBJS:$(SRCDIR)/%=$(OBJDIR)/%)
+OBJS := $(filter-out $(OBJDIR)/main.o,$(OBJS))
 TESTBINARIES = $(addsuffix .test,$(basename $(TESTSRCS)))
 TESTBINARIES := $(TESTBINARIES:$(TESTDIR)/%=$(OBJDIR)/%)
 TESTOBJS := $(addsuffix .check.o,$(basename $(TESTBINARIES)))
@@ -56,7 +57,7 @@ EXECUTABLES :=  # $(BINDIR)/app
 
 
 # TODO: embedded compilation
-all: $(TESTBINARIES)
+all: core $(TESTBINARIES)
 	
 $(EXECUTABLES): | $(BINDIR)
 
@@ -77,7 +78,6 @@ $(OBJDIR)/%.c: $(SRCDIR)/%.py
 	./$< c > $@
 $(OBJDIR)/%.h: $(SRCDIR)/%.py
 	./$< h > $@
-
 
 
 
@@ -102,7 +102,7 @@ POSTCOMPILE = @mv -f $(@:.o=.Td) $(@:.o=.d)
 
 %.o : %.c
 #%.o : %.c $(DEPDIR)/%.d
-$(OBJDIR)/%.o: $(OBJDIR)/%.c $(DEPDIR)/%.d
+$(OBJDIR)/%.o: $(OBJDIR)/%.c $(DEPDIR)/%.d | $(OBJDIR)
 	@echo C $@
 	$(COMPILE.c) $(OUTPUT_OPTION) $<
 	$(POSTCOMPILE)
@@ -123,6 +123,11 @@ $(OBJDIR)/%.test: $(OBJDIR)/%.check.o $(OBJS)
 	$(CC) -o $@ $(LDTESTFLAGS) $(DEBUGFLAGS) $^
 #@echo "LINKING $@ complete!"
 
+
+core: $(OBJDIR)/main.o $(OBJS)
+	@echo
+	@echo "LINKING $@!"
+	$(CC) -o $@ $(LDTESTFLAGS) $(DEBUGFLAGS) $^
 
 
 
@@ -149,14 +154,14 @@ $(OBJDIR)/%.log: $(OBJDIR)/%.test
 #CK_FORK=no valgrind -q --leak-check=full $< >> $@
 
 tags: $(SRCS)
-	ctags $(SRCDIR)
+	ctags -R .
 
 NEWESTSOURCE="${SRCDIR}/$(shell ls -t ${SRCDIR} | head -1)" 
 
 test: $(TESTRESULTS) tags
 	@echo
 	@llvm-profdata merge -sparse $(TESTDATA) -o $(OBJDIR)/default.profdata
-	@llvm-cov report --use-color -ignore-filename-regex='yxml*' --instr-profile=$(OBJDIR)/default.profdata $(OBJDIR)/odf.test $(addprefix "--object=", $(TESTBINARIES)) | sed 's/-----------------------------------------//'
+	@llvm-cov report --use-color -ignore-filename-regex='yxml*' --instr-profile=$(OBJDIR)/default.profdata $(TESTBINARIES) $(addprefix "--object=", $(TESTBINARIES)) | sed 's/-----------------------------------------//'
 	@echo
 	@echo "Some uncovered regions (search for 0 count lines if no red) in $(NEWESTSOURCE):"
 	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata $(NEWESTSOURCE) --use-color --show-expansions --show-line-counts-or-regions | egrep --color=never '(\[0;41m|   \^?0)' -C 3 | head -n 25 || true
@@ -164,8 +169,8 @@ test: $(TESTRESULTS) tags
 coverage:
 	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata
 
-coverage-html: ${COVERAGEDIR}
-	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata --format=html --show-expansions --output-dir=${COVERAGEDIR}
+coverage-html: ${COVERAGEDIR} $(TESTRESULTS)
+	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata --format=html --show-expansions --output-dir=${COVERAGEDIR} --ignore-filename-regex='yxml*'
 	@echo Full coverage report: file://$(abspath ${COVERAGEDIR})/index.html
 
 #@xdg-open file://$(abspath ${COVERAGEDIR})/index.html
@@ -179,7 +184,7 @@ debug:
 .DELETE_ON_ERROR: %.o %.log
 
 info:
-	@echo $(TESTOBJS)
+	@echo $(TESTRESULTS)
 
 -include $(OBJS:.o=.d)
 -include $(TESTOBJS:.o=.d)
