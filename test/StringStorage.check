@@ -20,6 +20,7 @@ extern Allocator stringStorageEntriesAllocator;
   ck_assert_int_eq(capacity - stringWrappers.freeCount, 1);
   ck_assert_int_eq(capacity - stringStorageEntries.freeCount, 2);
   ck_assert_ptr_ne(((HString *)stringWrappers.data)->value, org);
+  ck_assert_int_eq(((StringMetadata *)stringStorageMetadatas.data +0)->numUsages, 1);
   ck_assert(stringExists("hello"));
 
   const char *stored2 = storeString(org);
@@ -45,6 +46,7 @@ extern Allocator stringStorageEntriesAllocator;
 
   freeString("nonexisting");
   freeString("hello");
+  ck_assert_int_eq(((StringMetadata *)stringStorageMetadatas.data +1)->numUsages, 1);
   ck_assert(stringExists("hello"));
   freeString("hello");
   ck_assert(!stringExists("hello"));

@@ -55,6 +55,19 @@ void* poolCAlloc(MemoryPool *pool) {
     return p;
 }
 
+bool poolExists(MemoryPool *pool, void* element) {
+    if (element > pool->data && (char*)element < ((char*)pool->data)+pool->totalCount*pool->elementSize) { // extra checks
+        int memoryOffset = (char*)element - (char*) pool->data;
+        if (memoryOffset % pool->elementSize != 0) return false; // extra checks
+        int elementNumber = memoryOffset / pool->elementSize;
+        ushort blockNum = elementNumber / BlockSize;
+        int bitLocation = elementNumber - blockNum * BlockSize;
+
+        return pool->reservedBitArray[blockNum] & (1 << bitLocation);
+    }
+    return false;
+}
+
 // Free element indicated by pointer to the start of the element
 void poolFree_(MemoryPool *pool, void** element) {
     if (*element) {

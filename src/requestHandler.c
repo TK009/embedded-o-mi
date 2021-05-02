@@ -1,22 +1,59 @@
 #include "requestHandler.h"
 #include "StringStorage.h"
 #include "ParserUtils.h"
+#include "MemoryPool.h"
+#include <string.h>
 
 OdfTree tree;
 CreateStaticMemoryPool(LatestValue, LatestValues, ODFTREE_BLOCKS)
 
-// FIXME: better allocator selection
-//void LatestValue_destroy(LatestValue * p) {
-//    if (p->current.typeString) StringFree((void*)p->current.typeString);
-//    if (p->upcoming.typeString) StringFree((void*)p->upcoming.typeString);
-//    LatestValues_free(p);
-//}
-// TODO:
-//LatestValuesAllocator.free = LatestValue_destroy;
 
 struct RequestHandler {
     ResponseCallback respond;
 };
+
+CreateStaticMemoryPool(HandlerInfo, HandlerInfoPool, 4)
+
+// FIXME: better allocator selection
+void LatestValue_destroy(Path * path) {
+    LatestValue * p = path->value.latest;
+    if (p->current.typeString) StringFree((void*)p->current.typeString);
+    if (p->upcoming.typeString) StringFree((void*)p->upcoming.typeString);
+    if (p->writeHandler) HandlerInfoPool_free(p->writeHandler);
+    if ((path->flags & PF_ValueType) == V_String) free(p->current.value.str);
+    LatestValues_free(p);
+}
+
+// param must be HandlerInfo**
+void addSubscription(OmiRequestParameters* p, Path* path, void* param) {
+    (void) p;
+    HandlerInfo ** newSub = param;
+    if (! path->value.latest) return; // FIXME: add to object also to get new children to the sub
+    // prepend the list to reuse the parent list on children, while children can have more items
+    HandlerInfo ** currentHandler = &(path->value.latest->writeHandler);
+    // allocate new here if next pointer needs to be different.
+    if ((*currentHandler) != (*newSub)->nextOther) {
+        HandlerInfo * replacingNewSub = (HandlerInfo*) poolAlloc(&HandlerInfoPool);
+        memcpy(replacingNewSub, *newSub, sizeof(**newSub));
+        replacingNewSub->nextOther = *currentHandler; // link to earlier subs on this path
+        (*currentHandler)->prevOther = replacingNewSub;
+
+        (*newSub)->another = replacingNewSub; // link from the last same to enable easy removal
+
+        *newSub = replacingNewSub;
+    }
+    *currentHandler = *newSub;
+}
+
+HandlerInfo** getHandlerInfoPtr(Path * path) {
+    NodeType type = PathGetNodeType(path);
+    if (type == OdfInfoItem && path->flags & PF_ValueMalloc){
+        return & path->value.latest->writeHandler;
+    } else if (type == OdfObject) {
+        return (HandlerInfo**) & path->value.obj;
+    }
+    return NULL;
+}
 
 ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
     Path* storedPathSegment = NULL;
@@ -33,7 +70,7 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                 removePathSegment(&tree, path);
                 return Err_OOM_String;
             }
-            if (storedPathSegment->parent == path->parent) { // new was created
+            if (storedPathSegment->parent == path->parent) { // new was created (does not have internal parent yet)
                 // find parent
                 if (odfBinarySearch(&tree, path->parent, &resultIndex)) {
                     storedPathSegment->parent = &tree.sortedPaths[resultIndex];
@@ -44,10 +81,10 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                     return Err_InternalError;
                 }
 
-                // TODO: save created-event here, delay trigger until value is processed
+                // TODO: save create-event here, delay trigger until value is processed
 
                 // create value structure if InfoItem
-                if ((path->flags & (PF_IsInfoItem|PF_ValueMalloc)) == PF_IsInfoItem) {
+                if (PathGetNodeType(path) == OdfInfoItem && !(path->flags & PF_ValueMalloc)) {
                     storedPathSegment->value.obj = poolCAlloc(&LatestValues);
                     if (!storedPathSegment->value.obj) { //Error, cleanup mess
                         tmpStr = storedPathSegment->odfId;
@@ -56,10 +93,15 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                         return Err_OOM;
                     }
                     storedPathSegment->flags |= PF_ValueMalloc;
+                    // TODO: add subscriptions to Object(s) elsewhere,
+                    // if parent has subscriptions, copy them to child to keep subtree logic
+                    HandlerInfo ** h = getHandlerInfoPtr(storedPathSegment->parent);
+                    storedPathSegment->value.latest->writeHandler = h ? *h : NULL;
                 }
             }
             // metadata-like value
             if (event.data) {
+                storedPathSegment->flags |= PF_ValueMalloc;
                 storedPathSegment->value.str = event.data; // NOTE: free not needed
             }
             break;
@@ -100,10 +142,11 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
 
             if (odfBinarySearch(&tree, path, &resultIndex)) {
                 storedPathSegment = &tree.sortedPaths[resultIndex];
+
+                LatestValue * latest = storedPathSegment->value.latest;
                 // update flags, retaining old, and reset type just in case, TODO: handle type change if history is implemented
                 storedPathSegment->flags = (storedPathSegment->flags & ~PF_ValueType) | path->flags;
 
-                LatestValue * latest = storedPathSegment->value.latest;
                 bool changed = false, updated = false;
                 // store value
                 if (event.data) { // String type value
@@ -121,15 +164,50 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
 
                 // events:
                 if (latest->current.timestamp < latest->upcoming.timestamp) updated = true;
-                if (((storedPathSegment->flags & PF_ValueType) != V_String)
-                        && (latest->current.value.l != latest->upcoming.value.l)) changed = true;
+                //if (((storedPathSegment->flags & PF_ValueType) != V_String)
+                //        && (latest->current.value.l != latest->upcoming.value.l)) changed = true;
 
-                //TODO: trigger events here
-                //
+                // free old
+                if ((storedPathSegment->flags & PF_ValueType) == V_String)
+                    p->stringAllocator->free(latest->current.value.str);
+
+                // FIXME: optimize event responses (do not read the already found path)
+                latest->current = latest->upcoming;
+                // Trigger events here
+                if (updated)
+                    for (HandlerInfo * handler = latest->writeHandler; handler; handler = handler->nextOther) {
+                        // How to handle events and connections for subs
+                        // 1. if event && non-started callback response:
+                        //      todo: multiple event responses to the same ws connection requires implementation of a Queue
+                        //      (openConnection(cb)); responseStartWithObjects();
+                        // 2. track last path for all responses; create parents for each new response node
+                        //      First path: loop parents; save last path
+                        //      The rest: use subtree to close and open the next path
+                        OmiRequestParameters requestParams = p->parameters;
+                        p->parameters = handler->callbackInfo;
+                        OdfParserEvent readEvent = OdfParserEvent(PE_Path, NULL);
+                        if (!p->parameters.lastPath) {
+                            // TODO: Open/find connection here
+                            // connectionId = requestHandler.connectionFor(p->parameters.callbackAddr);
+                            // cancel sub if not successful
+                            connectionHandler.connections[p->parameters.connectionId].responsibleHandler = handler;
+                            for (Path * pathToOpen = p->pathStack; pathToOpen < p->currentOdfPath; ++pathToOpen){
+                                handler->handler(p, pathToOpen, readEvent);
+                                // FIXME: error reporting?
+                            }
+                            p->callbackOpenFlag |= 1 << p->parameters.connectionId;
+                        }
+                        // Run handler for the rest
+                        handler->handler(p, storedPathSegment, readEvent);
+                        // 
+                        handler->callbackInfo = p->parameters;
+                        p->parameters = requestParams;
+                    }
 
                 // update
                 // TODO: change of value type not allowed atm.
-                latest->current = latest->upcoming;
+                // FIXME: optimize event responses and move update back to here:
+                //latest->current = latest->upcoming;
                 latest->upcoming = (SingleValue) {0, 0, {.l = 0}};
 
                 return Err_OK;
@@ -141,7 +219,22 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
             if (event.data) p->stringAllocator->free(event.data);
             return Err_InvalidElement; // actually invalid
         case PE_RequestEnd:
-            responseFullSuccess(&p->parameters); // TODO: error cases: empty write? ...
+            // TODO
+            // Subs 3. close nodes, requests (and connections, if started from here)
+            //  use subtree to close
+            while (p->callbackOpenFlag) {
+                int connectionId = first1Bit(p->callbackOpenFlag);
+                HandlerInfo * sub = connectionHandler.connections[connectionId].responsibleHandler;
+                OmiRequestParameters requestParams = p->parameters;
+                p->parameters = sub->callbackInfo;
+                sub->handler(p, NULL, event);
+                p->parameters.lastPath = NULL;
+                p->parameters = requestParams;
+                p->callbackOpenFlag ^= 1 << connectionId;
+            }
+
+            // Respond
+            responseFullSuccess(&p->parameters); // FIXME: error cases: empty write? ...
             if (event.data) p->stringAllocator->free(event.data);
             return Err_OK;
     }
@@ -160,34 +253,43 @@ void respClose(OmiRequestParameters* p, Path* path, void* extra){
 void noopCb(OmiRequestParameters* p, Path* n, void* e){
     (void) p, (void) n, (void) e;
 }
+
+// next: Node which marks the end for the subtree  = Objects when request is ended
 void odfSubtree(OmiParser * p, Path * root, Path * next,
         NodeFunction open, NodeFunction close, void* param){
+    
+    // Include the root always, this way descriptions and MetaData can be requested
+    open(&p->parameters, root, param);
+
     Path* currentPath = NULL;
     // leaf; recursively respond the subtree
     Path * lastResponsePath = root;
     int resultIndex;
     if(odfBinarySearch(&tree, root, &resultIndex)) {
-        for (int i = resultIndex+1; i < tree.size; ++i) {
+        for (int i = resultIndex+1; i < tree.size; ++i) { // root already included, continue on the next index
             currentPath = &tree.sortedPaths[i];
-            // Back to same level as root; stop
+            // Back to the same level as root; stop
             if (currentPath->depth <= root->depth) break;
-            // Go up a level
-            if (currentPath->depth <= lastResponsePath->depth)
+            // (Stored) tree leaf encountered, go up to parents until at the level of currentPath
+            while (currentPath->depth <= lastResponsePath->depth){
                 close(&p->parameters, lastResponsePath, param);
-            // Descriptions in wrong place so just remove them unless specifically requested (root=leaf)
-            if ((currentPath->flags & (PF_IsDescription | PF_IsMetaData)) == 0
-                    || currentPath->hashCode == root->hashCode) {
+                lastResponsePath = lastResponsePath->parent;
+            }
+            // Descriptions and Metadatas can be removed here unless specifically requested (root = request leaf)
+            if (PathIsNonMeta(currentPath)){
                 // Go down a level
                 open(&p->parameters, currentPath, param);
+                lastResponsePath = currentPath;
+            } else { // Skip the whole sub tree of the currentPath
+                for (++i; i < tree.size && tree.sortedPaths[i].depth > currentPath->depth; ++i); // skip loop body
+                --i; // went one too far
             }
-            lastResponsePath = currentPath;
         }
     }
     // close the non-common parents between last (request or response) and current/next (request) path 
-    while (lastResponsePath->depth > next->depth) {
-        // Descriptions in wrong place so just remove them unless specifically requested (root=leaf)
-        if ((lastResponsePath->flags & (PF_IsDescription | PF_IsMetaData)) == 0
-                || lastResponsePath->hashCode == root->hashCode) {
+    while (lastResponsePath && PathGetDepth(lastResponsePath) >= PathGetDepth(next)) {
+        // Ignoring descriptions and metadatas unless root/request leaf
+        if (PathIsNonMeta(lastResponsePath) || pathCompare(lastResponsePath, root) == 0) {
             close(&p->parameters, lastResponsePath, param);
         }
         lastResponsePath = lastResponsePath->parent;
@@ -195,63 +297,72 @@ void odfSubtree(OmiParser * p, Path * root, Path * next,
 }
 
 
-CreateStaticMemoryPool(HandlerInfo, HandlerInfoPool, 4)
-
-void addSubscription(OmiRequestParameters* p, Path* path, void* param) {
-    (void) p;
-    HandlerInfo * subInfo = param;
-    // prepend the list to reuse the parent list on children, while children can have more items
-    HandlerInfo ** currentHandler = &(path->value.latest->writeHandler);
-    if (*currentHandler) {
-        // TODO: allocate here if next pointer needs to be different. Add a hashcode?
-        //if () subInfo = poolAlloc(&HandlerInfoPool);
-        subInfo->another = *currentHandler;
-        *currentHandler = subInfo;
-    }
-    else *currentHandler = (HandlerInfo *) subInfo;
-}
-
 
 ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event) {
     Path* next = NULL;
     int resultIndex;
     NodeFunction open, close;
-    HandlerInfo subInfo;
+    HandlerInfo *subInfo;
 
     if (p->parameters.requestType == OmiRead) {
         open = respOpen;
         close = respClose;
     } else if (p->parameters.requestType == OmiSubscribe && p->parameters.interval == -1) {
-        open = addSubscription;
+        open = addSubscription; // NOTE: only used for subtree function, in order to only save the sub to request leafs and their children
         close = noopCb;
-        //subInfo = (HandlerInfo){}; // TODO: this is a template for callbacks
+        subInfo = (HandlerInfo*) poolAlloc(&HandlerInfoPool);
+        *subInfo = (HandlerInfo){
+            .handlerType = HT_Subscription, 
+            .callbackInfo = p->parameters, 
+            .handler = handleRead,
+            .another = NULL,
+            .nextOther = NULL,
+            .prevOther = NULL,
+            .parentPath = path,
+        };
+        subInfo->callbackInfo.requestType = OmiRead;
+        subInfo->callbackInfo.lastPath = NULL;
     }
     switch (event.type) {
         case PE_Path:
-            // TODO: response
             // Needs to know what and how many elements to close
-            //   if end: close remaining last.parents
             if (odfBinarySearch(&tree, path, &resultIndex)) {
                 next = &tree.sortedPaths[resultIndex];
                 // check if first event: response needs to be started
-                if (! p->lastPath) responseStartWithObjects(&p->parameters, 200);
+                if (! p->parameters.lastPath && p->parameters.requestType == OmiRead)
+                    responseStartWithObjects(&p->parameters, 200);
 
                 // Was the last path a leaf? Not leaf if last is a parent of current
-                if (p->lastPath != next->parent) {
-                    odfSubtree(p, p->lastPath, next, respOpen, respClose, &subInfo);
-                } else {
-                    // not a leaf; add the node to the response already
-                    responseStartOdfNode(&p->parameters, next);
+                if (p->parameters.lastPath != next->parent) { // lastpath is leaf as next has different parent
+                    odfSubtree(p, p->parameters.lastPath, next, open, close, &subInfo);
+                } else if (p->parameters.lastPath) {
+                    // lastpath not a leaf; add the node to the response already
+                    responseStartOdfNode(&p->parameters, p->parameters.lastPath);
                 }
 
-                p->lastPath = next;
+                p->parameters.lastPath = next;
+            } else {
+                // 404
+                if (p->parameters.requestType == OmiSubscribe) {
+                    responseFullFailure(&p->parameters, 404, path->odfId, p);
+                } else {
+                    odfSubtree(p, p->parameters.lastPath, &tree.sortedPaths[0], respOpen, respClose, &subInfo);
+                    responseEndWithFailure(&p->parameters, 404, path->odfId);
+                }
+                return Err_NotFound;
             }
             if (event.data) p->stringAllocator->free(event.data);
             return Err_OK;
         case PE_RequestEnd:
-            if (p->lastPath) {
-                odfSubtree(p, p->lastPath, &tree.sortedPaths[0], respOpen, respClose, &subInfo);
-                responseEndWithObjects(&p->parameters);
+            //   if end: close remaining last.parents, reuse the bottom part of subtree function
+            odfSubtree(p, p->parameters.lastPath, &tree.sortedPaths[0], open, close, &subInfo);
+            if (p->parameters.requestType == OmiRead) {
+                if (p->parameters.lastPath) {
+                    responseEndWithObjects(&p->parameters);
+                }
+            } else if (p->parameters.requestType == OmiSubscribe && p->parameters.interval == -1) {
+                uint requestId = subInfo - (HandlerInfo *) HandlerInfoPool.data;
+                responseRequestId(&p->parameters, requestId);
             }
             if (event.data) p->stringAllocator->free(event.data);
             return Err_OK;
@@ -259,6 +370,33 @@ ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event) {
             if (event.data) p->stringAllocator->free(event.data);
             return Err_InternalError;
     }
+}
+
+ErrorResponse handleCancel(OmiParser * p, Path *path, OdfParserEvent event) {
+    (void) path;
+    uchar requestId;
+    if (event.data) { // simple data type, free it already here for cleaner code
+        requestId = *event.data;
+        p->stringAllocator->free(event.data);
+    } else return Err_InvalidElement;
+
+    if (event.type == PE_RequestID) {
+        HandlerInfo* subInfo = requestId + (HandlerInfo*)HandlerInfoPoolData;
+        if (poolExists(&HandlerInfoPool, subInfo)) {
+            for (HandlerInfo * next = subInfo; next; subInfo = next) {
+                HandlerInfo * prev = subInfo->prevOther;
+                next = subInfo->nextOther;
+                if (prev) prev->nextOther = next;
+                if (next) next->prevOther = prev;
+                next = subInfo->another;
+                poolFree(&HandlerInfoPool, subInfo);
+            }
+            responseFullSuccess(&p->parameters);
+        } else {
+            return Err_NotFound;
+        }
+    }
+    return Err_OK;
 }
 
 

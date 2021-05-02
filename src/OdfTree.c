@@ -1,23 +1,25 @@
 #define _POSIX_C_SOURCE 200809L
 #include "OdfTree.h"
 #include "utils.h"
+#include "OmiConstants.h"
 #include <math.h>
 #include <string.h>
 
 
 // TODO: Path_init( 
-Path* Path_init(Path* self, uchar depth, Path* parent, OdfId odfId, PathFlags flags) {
+Path* Path_init(Path* self, uchar depth, NodeType nodetype, Path* parent, OdfId odfId, PathFlags flags) {
     if (self) {
         uint parentHash = parent? parent->hashCode : 0;
         uchar odfIdLength = (uchar) strnlen(odfId, 0xFF);
         strhash idHashCode = calcHashCodeL(odfId, odfIdLength);
+        // depth: description: +0, MetaData: +1, InfoItem: +2, Object: +3
         *self = (Path){
             .odfId = odfId,
             .parent = parent,
             .odfIdLength = odfIdLength,
             .idHashCode = idHashCode,
             .hashCode = idHashCode ^ parentHash,
-            .depth = depth,
+            .depth = OdfDepth(depth, nodetype),
             .flags = flags,
             .value.l = 0LL
         };
@@ -37,7 +39,7 @@ OdfTree* OdfTree_init(OdfTree* self) {
     if (self) {
         self->size = 1;
         self->capacity = ODFTREE_SIZE;
-        Path_init(&(self->sortedPaths[0]), 1, NULL, "Objects", 0); // TODO use str constant
+        Path_init(&(self->sortedPaths[0]), 1, OdfObject, NULL, s_Objects, 0); // TODO use str constant
     }
     return self;
 }
@@ -47,28 +49,23 @@ void OdfTree_destroy(OdfTree* self, Allocator* stringAllocator, Allocator* value
         if (p->flags & PF_OdfIdMalloc)
             stringAllocator->free((void*)p->odfId);
         if (p->flags & PF_ValueMalloc) {
-            if (p->flags & PF_IsInfoItem)
-                valueAllocator->free(p->value.obj);
-            else
+            if (PathGetNodeType(p) == OdfInfoItem) {
+                valueAllocator->free(p);
+                //valueAllocator->free(p->value.obj);
+            }else
                 stringAllocator->free(p->value.str);
         }
     }
 }
 
-// return id
-//int _binarySearch(OdfTree * tree, Path needle, int left, int right) {
-//    int middle = (left + right) / 2; // left biased
-//    
-//    if (middle == left) return -1;
-//}
-// 
+
 
 schar pathCompare(const Path *a, const Path *b) {
     // recursively dive into root and calculate the order from root to bottom
     schar parentOrder = 0;
     if      (a->depth > b->depth) parentOrder = pathCompare(a->parent, b);
     else if (a->depth < b->depth) parentOrder = pathCompare(a, b->parent);
-    else if (a->depth > 1)        parentOrder = pathCompare(a->parent, b->parent);
+    else if (a->depth > ObjectsDepth) parentOrder = pathCompare(a->parent, b->parent);
 
     if (parentOrder != 0) return parentOrder;
     // parentOrder == 0
@@ -140,7 +137,7 @@ Path* addPath(OdfTree* tree, const char pathString[]) {
             strhash idHash = calcHashCodeL(idStart, segmentLength);
             strhash parentHash = parent? parent->hashCode : 0;
             Path newSegment = {
-                .depth = depth,
+                .depth = OdfDepth(depth, OdfObject),
                 .odfIdLength = (uchar) segmentLength,
                 .odfId = idStart,
                 .parent = parent,

@@ -25,10 +25,10 @@ Printf get(int i) {
   ResetBuffer()
 
 #define TestValue(type, accessor, val) \
-  Path_init(&info, 3, NULL, "MyInfo", PF_IsInfoItem | PF_ValueMalloc | type); \
+  Path_init(&info, 3, OdfInfoItem, NULL, "MyInfo", PF_ValueMalloc | type); \
   lv.current.value.accessor = val; \
   info.value.latest = &lv; \
-  responseStartOdfNode(&p, &info)
+  responseCloseOdfNode(&p, &info)
 
 #test responseStringsT
     connectionHandler.getPrintfForConnection = get;
@@ -49,7 +49,7 @@ Printf get(int i) {
       "<response><result><return returnCode=\"404\" description=\"Not found\"/></result></response></omiEnvelope>"); //valid
   
     Path description;
-    Path_init(&description, 3, NULL, "description", PF_IsDescription);
+    Path_init(&description, 3, OdfDescription, NULL, "description", 0);
     description.value.str = "Hello?";
     responseStartOdfNode(&p, &description);
     AssertResponseEquals("<description>Hello?");
@@ -57,21 +57,21 @@ Printf get(int i) {
     AssertResponseEquals("</description>");
   
     Path MetaData;
-    Path_init(&MetaData, 3, NULL, "MetaData", PF_IsMetaData);
+    Path_init(&MetaData, 3, OdfMetaData, NULL, "MetaData", 0);
     responseStartOdfNode(&p, &MetaData);
     AssertResponseEquals("<MetaData>");
     responseCloseOdfNode(&p, &MetaData);
     AssertResponseEquals("</MetaData>");
   
     Path Object;
-    Path_init(&Object, 3, NULL, "MyObj", 0);
+    Path_init(&Object, 3, OdfObject, NULL, "MyObj", 0);
     responseStartOdfNode(&p, &Object);
     AssertResponseEquals("<Object><id>MyObj</id>");
     responseCloseOdfNode(&p, &Object);
     AssertResponseEquals("</Object>");
 
     Path Objects;
-    Path_init(&Objects, 1, NULL, "Objects", 0);
+    Path_init(&Objects, 1, OdfObject, NULL, "Objects", 0);
     //responseStartOdfNode(&p, &Objects);
     //AssertResponseEquals("");
     responseCloseOdfNode(&p, &Objects);
@@ -112,36 +112,98 @@ Printf get(int i) {
     LatestValue lv = {.current = {.value.str = "none", .timestamp=10}};
   
     TestValue(V_String, str, "none");
-    AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:string\">none</value>");
+    AssertResponseEquals("<value unixTime=\"10\" type=\"xs:string\">none</value></InfoItem>");
     TestValue(V_Int, i, 1234);
-    AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:int\">1234</value>");
+    AssertResponseEquals("<value unixTime=\"10\" type=\"xs:int\">1234</value></InfoItem>");
     TestValue(V_Float, f, 12.34);
-    AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:float\">12.340000</value>");
+    AssertResponseEquals("<value unixTime=\"10\" type=\"xs:float\">12.340000</value></InfoItem>");
     TestValue(V_Double, d, 12.345678);
-    AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:double\">12.345678</value>"); // FIXME: check accuracy
+    AssertResponseEquals("<value unixTime=\"10\" type=\"xs:double\">12.345678</value></InfoItem>"); // FIXME: check accuracy
     TestValue(V_Long, l, 123456789012345678);
-    AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:long\">123456789012345678</value>");
+    AssertResponseEquals("<value unixTime=\"10\" type=\"xs:long\">123456789012345678</value></InfoItem>");
     TestValue(V_Short, i, (short) -1234);
-    AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:short\">-1234</value>");
+    AssertResponseEquals("<value unixTime=\"10\" type=\"xs:short\">-1234</value></InfoItem>");
     TestValue(V_Byte, b, (char) -120);
-    AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:byte\">-120</value>");
+    AssertResponseEquals("<value unixTime=\"10\" type=\"xs:byte\">-120</value></InfoItem>");
     TestValue(V_Boolean, i, true);
-    AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:boolean\">1</value>");
+    AssertResponseEquals("<value unixTime=\"10\" type=\"xs:boolean\">1</value></InfoItem>");
     TestValue(V_ULong, l, 18446744073709551615ul);
-    AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:unsignedLong\">18446744073709551615</value>");
+    AssertResponseEquals("<value unixTime=\"10\" type=\"xs:unsignedLong\">18446744073709551615</value></InfoItem>");
     TestValue(V_UInt, l, 10);
-    AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:unsignedInt\">10</value>");
+    AssertResponseEquals("<value unixTime=\"10\" type=\"xs:unsignedInt\">10</value></InfoItem>");
     TestValue(V_UShort, l, 10);
-    AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:unsignedShort\">10</value>");
+    AssertResponseEquals("<value unixTime=\"10\" type=\"xs:unsignedShort\">10</value></InfoItem>");
     TestValue(V_UByte, l, 10);
-    AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"xs:unsignedByte\">10</value>");
+    AssertResponseEquals("<value unixTime=\"10\" type=\"xs:unsignedByte\">10</value></InfoItem>");
     TestValue(V_ODF, str, "<Objects />");
-    AssertResponseEquals("<InfoItem name=\"MyInfo\"><value unixTime=\"10\" type=\"odf\"><Objects /></value>");
+    AssertResponseEquals("<value unixTime=\"10\" type=\"odf\"><Objects /></value></InfoItem>");
   
   
-    responseCloseOdfNode(&p, &info);
-    AssertResponseEquals("</InfoItem>");
-  
+    //responseCloseOdfNode(&p, &info);
+    //AssertResponseEquals("</InfoItem>");
 
+    responseRequestId(&p, 1);
+    AssertResponseEquals(
+      "<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\">"
+      "<response><result><return returnCode=\"200\"/>"
+      "<requestID>1</requestID></result></response></omiEnvelope>" );
+ 
+    OmiParser parser;
+    OmiParser_init(&parser, 1);
 
+    #define TestError(state, message) \
+      parser.st = state; \
+      responseFullFailure(&p, 500, "Error", &parser); \
+      ck_assert_str_eq(&actualResponse[120], message "\"/></result></response></omiEnvelope>"); \
+      ResetBuffer()
+
+    TestError(OmiState_PreOmiEnvelope, "omiEnvelope");
+    TestError(OmiState_OmiEnvelope, "omiEnvelope");
+    TestError(OmiState_Verb, "request element");
+    TestError(OmiState_Response, "response");
+    TestError(OmiState_Result, "result");
+    TestError(OmiState_RequestID, "requestID");
+    TestError(OmiState_Return, "return");
+    TestError(OmiState_Msg, "msg");
+    TestError(OdfState_Objects, "Objects");
+    OmiParser_pushPath(&parser, "MyObj", 0);
+    TestError(OdfState_Object, "Object MyObj");
+    TestError(OdfState_Id, "id in MyObj");
+    TestError(OdfState_ObjectObjects, "MyObj, Object children");
+    TestError(OdfState_ObjectInfoItems, "MyObj, InfoItem children");
+    OmiParser_pushPath(&parser, "MyInfo", 0);
+    TestError(OdfState_InfoItem, "InfoItem MyInfo");
+    TestError(OdfState_Description, "description of MyInfo");
+    OmiParser_pushPath(&parser, "MetaData", 0);
+    TestError(OdfState_MetaData, "MetaData of MyInfo");
+    OmiParser_popPath(&parser);
+    TestError(OdfState_Value, "value of MyInfo");
+    TestError(OmiState_Ready, "id internal state"); // invalid ...
+    TestError(OdfState_End, "the end, after MyInfo");
+
+    parser.st = OmiState_OmiEnvelope;
+    #define TestErrorCode(errcode, returncode, message) \
+      responseFromErrorCode(&parser, errcode); \
+      ck_assert_str_eq(&actualResponse[87], "returnCode=\"" # returncode "\" description=\"" message "; Near omiEnvelope\"/></result></response></omiEnvelope>"); \
+      ResetBuffer()
+    responseFromErrorCode(&parser, Err_OK);
+    AssertResponseEquals("");
+    responseFromErrorCode(&parser, Err_End);
+    AssertResponseEquals("");
+    responseFromErrorCode(&parser, Err_NotFound);
+    AssertResponseEquals("");
+    TestErrorCode(Err_NonMatchingCloseTag, 400, "Non matching close tag");
+    TestErrorCode(Err_StackOverflow, 500, "XML parser stack overflow, too deep structure");
+    TestErrorCode(Err_XmlError, 400, "XML error");
+    TestErrorCode(Err_InvalidCharRef, 400, "Invalid XML character reference");
+    TestErrorCode(Err_InvalidElement, 400, "Invalid O-MI/O-DF element");
+    TestErrorCode(Err_InvalidDataFormat, 400, "Invalid O-MI payload type or not implemented");
+    TestErrorCode(Err_InvalidAttribute, 400, "Invalid O-MI/O-DF element attribute");
+    TestErrorCode(Err_TooDeepOdf, 500, "O-DF parser stack overflow, too deep hierarchy");
+    TestErrorCode(Err_InternalError, 500, "Internal error");
+    TestErrorCode(Err_OOM_String, 500, "Out of text memory");
+    TestErrorCode(Err_OOM, 500, "Out of memory");
+    TestErrorCode(Err_NotImplemented, 501, "Not implemented");
+
+    OmiParser_destroy(&parser);
 

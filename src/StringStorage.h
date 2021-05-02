@@ -42,5 +42,6 @@ void freeString(const char *str);
 bool hStringExists(const HString *str);
 bool stringExists(const char *str);
 
+extern Allocator stringStorageFreecator;
 
 #endif

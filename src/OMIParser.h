@@ -70,6 +70,7 @@ typedef enum ErrorResponse {
     Err_OOM_String          = 7,
     Err_OOM                 = 8,
     Err_NotImplemented      = 9,
+    Err_NotFound            = 10,
 } ErrorResponse;
 
 typedef enum OdfParserEventType {
@@ -97,23 +98,22 @@ typedef ErrorResponse (*OdfPathCallback)(OmiParser *, Path *, OdfParserEvent);
 //typedef void (*ResponseCallback)(char *content); // Send
 
 struct OmiParser {
-    uchar connectionId;
+    OmiParserState st;
     uint bytesRead;
     uint stPosition; // tells the position in current state, used for comparison of tag names etc.
     uint tempStringLength;
     // functions
     StringCallback stringCallback;
-    Allocator * stringAllocator;
     OdfPathCallback odfCallback;
     Path* currentOdfPath;
-    Path* lastPath;
-    Path pathStack[OdfDepthLimit]; // for odfCallback
     //ResponseCallback responseCallback; // not used in parser, but can be used in other callbacks
+    uint callbackOpenFlag; // conection id bit array For closing subscription notifications
     
     PartialHash stHash; // hash state to construct hash for comparison of text content and attribute values
-    OmiParserState st;
+    Allocator * stringAllocator;
     OmiRequestParameters parameters;
     yxml_t xmlSt;
+    Path pathStack[OdfDepthLimit]; // for odfCallback
     char tempString[ParserMaxStringLength];
     char xmlBuffer[XmlParserBufferSize];
 };
@@ -157,9 +157,13 @@ typedef struct HandlerInfo HandlerInfo;
 struct HandlerInfo {
     HandlerType handlerType;
     OdfPathCallback handler;
+    Path * parentPath;
+    HandlerInfo * another; // next same sub
+    HandlerInfo * prevOther; // previous different sub for the same path
+    HandlerInfo * nextOther; // next different sub for the same path
     OmiRequestParameters callbackInfo; // use union of OmiParameters/ScriptInfo?
-    HandlerInfo * another;
 };
+//#define HandlerInfo(...) {}
 
 struct LatestValue {
     SingleValue current;

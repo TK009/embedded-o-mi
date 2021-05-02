@@ -5,18 +5,18 @@
 
 #test pathCompareT
     Path Objects;
-    Path_init( &Objects, 1, NULL, "Objects", 0 );
+    Path_init( &Objects, 1, OdfObject, NULL, "Objects", 0 );
     Path MyObject;  // Objects/MyObject
-    Path_init( &MyObject, 2, &Objects, "MyObject", 0 );
+    Path_init( &MyObject, 2, OdfObject, &Objects, "MyObject", 0 );
     Path MyItem;  // Objects/MyObject/MyItem
-    Path_init( &MyItem, 3, &MyObject, "MyItem", PF_IsInfoItem );
+    Path_init( &MyItem, 3, OdfInfoItem, &MyObject, "MyItem", 0 );
     Path MyItem2;  // Objects/MyObject/MyItem2
-    Path_init( &MyItem2, 3, &MyObject, "MyItem2", PF_IsInfoItem );
+    Path_init( &MyItem2, 3, OdfInfoItem, &MyObject, "MyItem2", 0 );
 
     Path MyObject2;  // Objects/MyObjecu
-    Path_init( &MyObject2, 2, &Objects, "MyObjecu", 0 );
+    Path_init( &MyObject2, 2, OdfObject, &Objects, "MyObjecu", 0 );
     Path MyItem3; // Objects/MyObjecu/MyItem
-    Path_init( &MyItem3, 3, &MyObject2, "MyItem3", PF_IsInfoItem );
+    Path_init( &MyItem3, 3, OdfInfoItem, &MyObject2, "MyItem3", 0 );
 
 
     // Equals
@@ -89,9 +89,9 @@
     const Path rd = odf.sortedPaths[2];
 
     // Depth
-    ck_assert_uint_eq(st.depth, 1);
-    ck_assert_uint_eq(nd.depth, 2);
-    ck_assert_uint_eq(rd.depth, 3);
+    ck_assert_uint_eq(st.depth, OdfDepth(1, OdfObject));
+    ck_assert_uint_eq(nd.depth, OdfDepth(2, OdfObject));
+    ck_assert_uint_eq(rd.depth, OdfDepth(3, OdfObject));
 
     // Parent
     ck_assert_ptr_eq(st.parent, NULL);

@@ -11,11 +11,12 @@
 extern OdfTree tree;
 extern Allocator LatestValuesAllocator;
 extern MemoryPool LatestValues;
-void LatestValue_destroy(LatestValue * p);
+void LatestValue_destroy(Path * p);
 
 ErrorResponse handleRequestPath(OmiParser *p, Path *path, OdfParserEvent event);
 ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event);
 ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event);
+ErrorResponse handleCancel(OmiParser * p, Path *path, OdfParserEvent event);
 
 // parameters: connectionId, content?
 typedef void (*ResponseCallback)(int, const char *);

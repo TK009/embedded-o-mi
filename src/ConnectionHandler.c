@@ -113,10 +113,26 @@ void responseStartWithObjects(const OmiRequestParameters * p, int returnCode){
     send(omiVersionNumStr(p->version));
     send("\">");
 }
+void responseRequestId(const OmiRequestParameters * p, uint requestId) {
+    Printf send = connectionHandler.getPrintfForConnection(p->connectionId);
+    responseStart(p, false);
+    responseReturnCode(p, 200, NULL);
+    send("<"); send(s_requestID);
+    send(">%d</", requestId); send(s_requestID); send(">");
+    responseEnd(p);
+}
 
 void responseFullSuccess(const OmiRequestParameters * p){
     responseStart(p, false);
     responseReturnCode(p, 200, NULL);
+    responseEnd(p);
+}
+void responseEndWithFailure(const OmiRequestParameters * p, int returnCode, const char * description) {
+    responseOdfEnd(p);
+    Printf send = connectionHandler.getPrintfForConnection(p->connectionId);
+    send("</"); send(s_result); send(">");
+    send("<"); send(s_result); send(">");
+    responseReturnCode(p, returnCode, description);
     responseEnd(p);
 }
 void responseFullFailure(const OmiRequestParameters * p, int returnCode,
@@ -176,8 +192,14 @@ void responseFullFailure(const OmiRequestParameters * p, int returnCode,
             case OdfState_Value:
                 sprintf(d, "%s; Near %s of %s", description, s_value, parser->currentOdfPath->odfId);
                 break;
-            default:
-                strcpy(d, description);
+            case OmiState_Ready:
+                sprintf(d, "%s; Invalid internal state", description);
+                break;
+            case OdfState_End:
+                sprintf(d, "%s; Near the end, after %s", description, parser->currentOdfPath->odfId);
+                break;
+            //default:
+            //    strcpy(d, description);
         }
 
     } else {
@@ -214,46 +236,47 @@ void responseTypeAndValue(Printf send, const Path * node){
 }
 void responseStartOdfNode(const OmiRequestParameters * p, const Path *node){
     Printf send = connectionHandler.getPrintfForConnection(p->connectionId);
-    switch (node->flags & (PF_IsMetaData | PF_IsInfoItem | PF_IsDescription)){
-        case PF_IsDescription:
+    switch (PathGetNodeType(node)){
+        case OdfDescription:
             send("<"); send(s_description); send(">");
             if (node->value.str) send(node->value.str);
             break;
-        case PF_IsMetaData:
+        case OdfMetaData:
             send("<"); send(s_MetaData); send(">");
             break;
-        case PF_IsInfoItem:
+        case OdfInfoItem:
             send("<"); send(s_InfoItem);
             send(" "); send(s_name); send("=\"");
             send(node->odfId); send("\">");
+            break;
+        case OdfObject:
+            if (node->depth == ObjectsDepth) break; // handled elsewhere, in start with objects
+            send("<"); send(s_Object); send("><"); send(s_id); send(">");
+            send("%.*s", node->odfIdLength, node->odfId); send("</"); send(s_id); send(">");
+            break;
+    }
+}
+void responseCloseOdfNode(const OmiRequestParameters * p, const Path *node){
+    Printf send = connectionHandler.getPrintfForConnection(p->connectionId);
+    switch (PathGetNodeType(node)){
+        case OdfDescription:
+            send("</"); send(s_description); send(">");
+            break;
+        case OdfMetaData:
+            send("</"); send(s_MetaData); send(">");
+            break;
+        case OdfInfoItem:
+            // Value comes after possible description and metadata
             if (node->flags & PF_ValueMalloc && node->value.latest) {
                 send("<"); send(s_value); send(" "); send(s_unixTime);
                 send("=\"%d\" ", node->value.latest->current.timestamp);
                 send(s_type); send("=\"");
                 responseTypeAndValue(send, node);
             }
-            break;
-        default: // Object
-            if (node->depth == 1) break; // handled elsewhere, in start with objects
-            send("<"); send(s_Object); send("><"); send(s_id); send(">");
-            send(node->odfId); send("</"); send(s_id); send(">");
-            break;
-    }
-}
-void responseCloseOdfNode(const OmiRequestParameters * p, const Path *node){
-    Printf send = connectionHandler.getPrintfForConnection(p->connectionId);
-    switch (node->flags & (PF_IsMetaData | PF_IsInfoItem | PF_IsDescription)){
-        case PF_IsDescription:
-            send("</"); send(s_description); send(">");
-            break;
-        case PF_IsMetaData:
-            send("</"); send(s_MetaData); send(">");
-            break;
-        case PF_IsInfoItem:
             send("</"); send(s_InfoItem); send(">");
             break;
-        default:
-            if (node->depth == 1) break; // handled elsewhere, in start with objects
+        case OdfObject:
+            if (node->depth == ObjectsDepth) break; // handled elsewhere, in start with objects
             send("</"); send(s_Object); send(">");
             break;
     }
@@ -301,5 +324,7 @@ void responseFromErrorCode(OmiParser* parser, ErrorResponse err){
         case Err_NotImplemented     :
             responseFullFailure(p, 501, "Not implemented", parser);
             break;
+        case Err_NotFound :
+            break; // response started already elsewhere, handle error there
     }
 }

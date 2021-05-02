@@ -31,6 +31,7 @@ int main(int argc, char ** argv) {
             case Err_End:
                 printf("\r\n"); // Separator: Easier to pipe the result to other programs
                 fflush(stdout);
+                OmiParser_init(parser, 0);
                 break;
         }
     }

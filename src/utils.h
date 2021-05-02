@@ -69,6 +69,7 @@ int bitCount(uint u);
 int first1Bit(int i);
 int first0Bit(int i);
 
+typedef void (*FreeF)(void *);
 typedef const struct Allocator{
     void* (*malloc)(size_t size);
     void* (*calloc)(size_t n, size_t size);

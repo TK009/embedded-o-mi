@@ -154,7 +154,7 @@ $(OBJDIR)/%.log: $(OBJDIR)/%.test
 #CK_FORK=no valgrind -q --leak-check=full $< >> $@
 
 tags: $(SRCS)
-	ctags -R .
+	ctags -R src obj
 
 NEWESTSOURCE="${SRCDIR}/$(shell ls -t ${SRCDIR} | head -1)" 
 

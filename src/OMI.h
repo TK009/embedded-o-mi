@@ -2,6 +2,7 @@
 #define OMI_H
 
 #include "utils.h"
+#include "OdfTree.h"
 
 typedef enum OmiVersion {
     OmiV_unknown,
@@ -41,6 +42,7 @@ typedef struct OmiRequestParameters {
     float interval;
     char* callbackAddr;
     int connectionId; // Opened connection for either immediate response or callback
+    Path* lastPath; // Last path
 } OmiRequestParameters;
 
 //#define OmiRequestParameters_INITIALIZER {.requestType=OmiInvalid, .arrival=}

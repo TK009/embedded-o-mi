@@ -93,9 +93,9 @@ SkiplistEntry* Skiplist_findP(Skiplist* slist, const void* key, SkiplistEntry * 
         } else {
             int cmp = slist->compare(curr->next[level]->key, key);
             if (cmp == 0) { // Found
-                for (;level >= 0; --level)
-                    prev[level] = curr;
-                return (curr->next[level+1]); 
+                for (int i = level;i >= 0; --i)
+                    prev[i] = curr;
+                return (curr->next[level]); 
             } else if (cmp > 0) { // Drop down a level 
                 -- level;
             } else { // Keep going at this level
@@ -140,7 +140,7 @@ Pair Skiplist_set(Skiplist* slist, void* key, void* value) {
     }
 
     // Didn't find it, we need to insert a new entry
-    SkiplistEntry * new_entry = slist->alloc->malloc(sizeof(SkiplistEntry));
+    SkiplistEntry * new_entry = slist->alloc->calloc(1,sizeof(SkiplistEntry));
     if (!new_entry) return (Pair){NULL, (void*)1}; // XXX: Special return value to indicate malloc fail
     new_entry->height = grand(slist->head->height);
     new_entry->key = key;

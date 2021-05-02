@@ -26,6 +26,20 @@ typedef struct SingleValue {
     AnyValue value;
 } SingleValue;
 
+typedef enum NodeType {
+    OdfDescription = 0,
+    OdfMetaData = 1,
+    OdfInfoItem = 2,
+    OdfObject = 3,
+} NodeType;
+
+#define OdfDepth(depth, nodetype) ((depth << 2) + nodetype)
+#define PathGetDepth(p) (p->depth >> 2)
+#define PathGetNodeType(p) (p->depth & 3)
+#define PathSetNodeType(p, nodetype) (p->depth = p->depth & ~3 | nodetype)
+#define PathIsNonMeta(p) (p->depth & 2)
+#define ObjectsDepth OdfDepth(1,OdfObject)
+
 
 
 // General idea is to build a prefix tree for O-DF
@@ -42,7 +56,7 @@ struct Path {
 };
 typedef struct Path Path;
 
-Path* Path_init(Path* self, uchar depth, Path* parent, OdfId odfId, PathFlags flags);
+Path* Path_init(Path* self, uchar depth, NodeType nodetype, Path* parent, OdfId odfId, PathFlags flags);
 
 schar pathCompare(const Path* a, const Path* b);
 
@@ -83,9 +97,9 @@ typedef enum ValueType {
 // NOTE: most of these are placeholders only
 typedef enum PathFlag {
     PF_ValueType             = 1 | 2 | 4 | 8, // For InfoItem values
-    PF_IsInfoItem            = 1 << 4, // Object tag or otherwise InfoItem or one below
-    PF_IsMetaData            = 1 << 5, // MetaData tag
-    PF_IsDescription         = 1 << 6, // description tag
+    //PF_IsInfoItem            = 1 << 4, // Object tag or otherwise InfoItem or one below
+    //PF_IsMetaData            = 1 << 5, // MetaData tag
+    //PF_IsDescription         = 1 << 6, // description tag
     PF_IsReadOnly            = 1 << 7, // write request not allowed 
     PF_HasEventSub           = 1 << 8, // write to this triggers event subscription(s)
     PF_HasPollSub            = 1 << 9, // write to this should be saved for poll
@@ -96,7 +110,7 @@ typedef enum PathFlag {
     PF_IsTemporary           = 1 << 14, // in ram, disappears on poweroff
     PF_HasSystemWriteHandler = 1 << 15, // Actuator or system setting
     PF_HasSystemReadHandler  = 1 << 16, // Sensor or system metric
-    PF_IsMetaDataChild       = 1 << 17, // Child of metadata
+    //PF_IsMetaDataChild       = 1 << 17, // Child of metadata
     PF_isDirty               = 1 << 18, // Has modifications that should be saved to flash
     PF_OdfIdMalloc           = 1 << 19, // odfId string is malloc'd and should be freed when destroying this Path
     PF_ValueMalloc           = 1 << 20, // odfId string is malloc'd and should be freed when destroying this Path

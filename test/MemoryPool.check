@@ -34,6 +34,12 @@ int *item;
   ck_assert_int_eq(((int*)intPool.data)[0], 1234567890);
   ck_assert_int_eq(((int*)intPool.data)[1], 0x12345678);
 
+  // pool exists
+  ck_assert(poolExists(&intPool, item2));
+  ck_assert(!poolExists(&intPool, 1 + (char*) item2));
+  ck_assert(!poolExists(&intPool, 70*4 + (char*) item2));
+  ck_assert(!poolExists(&intPool, -70*4 + (char*) item2));
+
 //#test nextBlockAndFilledPoolT
   for (int i = 2; i < 32; ++i) {
     item = poolAlloc(&intPool);

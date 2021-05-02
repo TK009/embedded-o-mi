@@ -32,23 +32,23 @@ char* storeTempString(OmiParser *p, const char * str, size_t stringLength) {
 OmiParser* OmiParser_init(OmiParser* p, uchar connectionId) {
     if (p) {
         *p = (OmiParser){
-            .connectionId = connectionId, // use same as i?
             .bytesRead = 0,
             .stPosition = 0,
             .tempStringLength = 0,
             .stringAllocator = &stdAllocator, // TODO: change to string storage
             .odfCallback = handleRequestPath, //odfHandler
-            .lastPath = NULL,
             .stHash = emptyPartialHash,
             .st = OmiState_PreOmiEnvelope,
             //.parameters = OmiRequestParameters_INITIALIZER(arrival
             .tempString = "",
-            .currentOdfPath = &p->pathStack[0]
+            .currentOdfPath = &p->pathStack[0],
+            .callbackOpenFlag = 0,
             };
         memset(&p->pathStack, 0, sizeof(p->pathStack));
-        Path_init(&(p->pathStack[0]), 1, NULL, s_Objects, 0);
+        Path_init(&(p->pathStack[0]), 1, OdfObject, NULL, s_Objects, 0);
         memset(&p->parameters, 0, sizeof(p->parameters));
         p->parameters.arrival = getTimestamp();
+        p->parameters.connectionId = connectionId; // use same as i?
         yxml_init(&p->xmlSt, &p->xmlBuffer, XmlParserBufferSize);
     }
     return p;
@@ -65,21 +65,20 @@ OmiParser* getParser(uchar connectionId) {
 }
 
 
-ErrorResponse OmiParser_pushPath(OmiParser* p, OdfId id, PathFlags flags) {
-    int depth = p->currentOdfPath->depth;
+ErrorResponse OmiParser_pushPath(OmiParser* p, OdfId id, NodeType type){ // flags) {
+    int depth = PathGetDepth(p->currentOdfPath);
     if (depth >= OdfDepthLimit) return Err_TooDeepOdf;
 
     // allocates the id!
     char * copiedId = storeTempString(p, id, strlen(id));
     if (!copiedId) return Err_OOM;
-    Path* newPath = Path_init(p->currentOdfPath+1, depth+1, p->currentOdfPath, copiedId, flags);
+    Path* newPath = Path_init(p->currentOdfPath+1, depth+1, type, p->currentOdfPath, copiedId, 0);
     p->currentOdfPath = newPath;
     return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_Path, NULL));
 }
 Path* OmiParser_popPath(OmiParser* p){
     Path* old = p->currentOdfPath;
     if (!old) return NULL;
-    //if (!(old->flags & (PF_IsDescription | PF_IsMetaData))) // desc and meta have static strings
     if (old->idHashCode != h_Objects)
         free((void*) old->odfId); // TODO: change hardcoded free function if custom allocator is used
     //if (old->flags & PF_ValueMalloc) // free handled by the odfCallback
@@ -214,6 +213,9 @@ static inline int processVerb(OmiParser *p, yxml_ret_t r) {
                     p->parameters.interval = parseFloat(p->tempString); // NOTE time unit?; full seconds or ms?
                     break;
                 case h_callback:
+                    if (p->tempStringLength == 1 && p->tempString[0] == '0') { // current connection
+                        p->tempString[0] = (char) p->parameters.connectionId + 10; // we don't want to use 0 (null)
+                    }
                     storeTempStringOrError(p->parameters.callbackAddr);
                     break;
                 default:
@@ -300,6 +302,8 @@ static inline int processRequestID(OmiParser *p, yxml_ret_t r){
             else
                 p->st = OmiState_Verb;
             storeTempStringOrError(rId);
+            rId[0] = (uchar) parseInt(rId);
+            rId[1] = '\0';
             return p->odfCallback(p, NULL, OdfParserEvent(PE_RequestID, rId));
         case YXML_ELEMSTART: // not allowed
             return Err_InvalidElement;
@@ -371,7 +375,7 @@ static inline int processId(OmiParser *p, yxml_ret_t r){
         case YXML_ELEMEND:
             p->st = OdfState_ObjectInfoItems;
             endTempString(p);
-            return OmiParser_pushPath(p, p->tempString, 0);
+            return OmiParser_pushPath(p, p->tempString, OdfObject);
         case YXML_ELEMSTART: // not allowed
             return Err_InvalidElement;
         default: break;
@@ -398,7 +402,7 @@ static inline int processObjectInfoItems(OmiParser *p, yxml_ret_t r){
             break;
         case YXML_ELEMEND:
             // Commented; we can go to ObjectObjects as it is essentially the same as Objects
-            //if (p->currentOdfPath->depth == 2)
+            //if (PathGetDepth(p->currentOdfPath) == 2)
             //    p->st = OdfState_Objects;
             //else
             p->st = OdfState_ObjectObjects;
@@ -415,7 +419,7 @@ static inline int processObjectObjects(OmiParser *p, yxml_ret_t r){
             requireTag(Object, OdfState_Object);
             break;
         case YXML_ELEMEND:
-            if (p->currentOdfPath->depth == 1){
+            if (PathGetDepth(p->currentOdfPath) == 1){
                 p->st = OdfState_End;
                 return p->odfCallback(p, NULL, OdfParserEvent(PE_RequestEnd,NULL));
             } else {
@@ -433,13 +437,13 @@ static inline int processDescription(OmiParser *p, yxml_ret_t r){
             break;
         case YXML_ELEMEND:
             storeTempStringOrError(descriptionString);
-            if (p->currentOdfPath->flags & PF_IsInfoItem)
+            if (PathGetNodeType(p->currentOdfPath) == OdfInfoItem)
                 p->st = OdfState_InfoItem;
             else // if (inside object)
                 p->st = OdfState_ObjectInfoItems;
 
             return p->odfCallback(p,
-                    Path_init(p->currentOdfPath+1, p->currentOdfPath->depth+1, p->currentOdfPath, s_description, PF_IsDescription),
+                    Path_init(p->currentOdfPath+1, PathGetDepth(p->currentOdfPath)+1, OdfDescription, p->currentOdfPath, s_description, 0),
                     OdfParserEvent(PE_Path, descriptionString));
         case YXML_ELEMSTART: // not allowed
             return Err_InvalidElement;
@@ -459,7 +463,7 @@ static inline int processInfoItem(OmiParser *p, yxml_ret_t r){
             switch (calcHashCode(p->xmlSt.attr)) {
                 case h_name:
                     endTempString(p);
-                    return OmiParser_pushPath(p, p->tempString, PF_IsInfoItem);
+                    return OmiParser_pushPath(p, p->tempString, OdfInfoItem);
                 case h_type: // TODO: Save InfoItem "type" attribute
                     break;
                 default: break; // TODO: Save others as metadata
@@ -473,7 +477,7 @@ static inline int processInfoItem(OmiParser *p, yxml_ret_t r){
                     break;
                 case h_MetaData:
                     p->st = OdfState_MetaData;
-                    return OmiParser_pushPath(p, s_MetaData, PF_IsMetaData);
+                    return OmiParser_pushPath(p, s_MetaData, OdfMetaData);
                 case h_value:
                     initTempString(p); // zero for content in case no attrs before value.
                     p->st = OdfState_Value;
@@ -484,7 +488,7 @@ static inline int processInfoItem(OmiParser *p, yxml_ret_t r){
             break;
         case YXML_ELEMEND:
             OmiParser_popPath(p);
-            if (p->currentOdfPath->flags & PF_IsMetaData)
+            if (PathGetNodeType(p->currentOdfPath) == OdfMetaData)
                 p->st = OdfState_MetaData;
             else //if (inside Object)
                 p->st = OdfState_ObjectInfoItems;
@@ -532,40 +536,40 @@ static inline int processValue(OmiParser *p, yxml_ret_t r){
                 case h_type:
                     switch (hash) {
                         case h_xsint: case h_xsinteger: // h_xsdecimal
-                            p->currentOdfPath->flags = PF_IsInfoItem | V_Int;
+                            p->currentOdfPath->flags = V_Int;
                             break;
                         case h_xsfloat:
-                            p->currentOdfPath->flags = PF_IsInfoItem | V_Float;
+                            p->currentOdfPath->flags = V_Float;
                             break;
                         case h_xsdouble:
-                            p->currentOdfPath->flags = PF_IsInfoItem | V_Double;
+                            p->currentOdfPath->flags = V_Double;
                             break;
                         case h_xsshort:
-                            p->currentOdfPath->flags = PF_IsInfoItem | V_Short;
+                            p->currentOdfPath->flags = V_Short;
                             break;
                         case h_xsbyte:
-                            p->currentOdfPath->flags = PF_IsInfoItem | V_Byte;
+                            p->currentOdfPath->flags = V_Byte;
                             break;
                         case h_xsstring:
-                            p->currentOdfPath->flags = PF_IsInfoItem | V_String;
+                            p->currentOdfPath->flags = V_String;
                             break;
                         case h_xsboolean:
-                            p->currentOdfPath->flags = PF_IsInfoItem | V_Boolean;
+                            p->currentOdfPath->flags = V_Boolean;
                             break;
                         case h_xsunsignedInt: // h_xsnonNegativeInteger h_xspositiveInteger
-                            p->currentOdfPath->flags = PF_IsInfoItem | V_UInt;
+                            p->currentOdfPath->flags = V_UInt;
                             break;
                         case h_xsunsignedShort:
-                            p->currentOdfPath->flags = PF_IsInfoItem | V_UShort;
+                            p->currentOdfPath->flags = V_UShort;
                             break;
                         case h_xsunsignedByte:
-                            p->currentOdfPath->flags = PF_IsInfoItem | V_UByte;
+                            p->currentOdfPath->flags = V_UByte;
                             break;
                         case h_xslong:
-                            p->currentOdfPath->flags = PF_IsInfoItem | V_Long;
+                            p->currentOdfPath->flags = V_Long;
                             break;
                         default:
-                            p->currentOdfPath->flags = PF_IsInfoItem | V_String;
+                            p->currentOdfPath->flags = V_String;
                             return p->odfCallback(p, p->currentOdfPath, OdfParserEvent(PE_ValueType, data));
                     }
                     free(data);
@@ -652,6 +656,8 @@ ErrorResponse runParser(OmiParser * p, char * inputChunk) {
                     // FIXME: will cause problems if data contains omiEnvelope after error
                     if (elementEquals(omiEnvelope)) {
                         p->st = OmiState_OmiEnvelope;
+                    } else {
+                        yxml_init(&p->xmlSt, &p->xmlBuffer, XmlParserBufferSize);
                     }
                 }
                 break;

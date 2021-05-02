@@ -6,8 +6,14 @@
 #include "OdfTree.h"
 #include <stdio.h>
 
+void addSubscription(OmiRequestParameters* p, Path* path, void* param);
+extern MemoryPool HandlerInfoPool;
+HandlerInfo** getHandlerInfoPtr(Path * path);
+
 char actualResponse[2048]; // max response size for tests
 char * bufferLocation = actualResponse;
+char actualCallback[2048]; // max response size for tests
+char * callbackLocation = actualCallback;
 int saveActualResponse(const char * format, ...) {
   va_list argptr;
   va_start(argptr, format);
@@ -15,18 +21,43 @@ int saveActualResponse(const char * format, ...) {
   if (ret > 0) bufferLocation += ret;
   return 0;
 }
+int saveActualCallback(const char * format, ...) {
+  va_list argptr;
+  va_start(argptr, format);
+  int ret = vsprintf(callbackLocation, format, argptr);
+  if (ret > 0) callbackLocation += ret;
+  return 0;
+}
 
 Printf get(int i) {
-  (void) i;
+  if (i==2)
+    return saveActualCallback;
   return saveActualResponse;
 }
 
 #define ResetBuffer() bufferLocation = actualResponse; bufferLocation[0] = '\0'
+#define ResetCallback() callbackLocation = actualCallback; callbackLocation[0] = '\0'
 #define AssertResponseEquals(expected) \
   ck_assert_str_eq(actualResponse, (expected)); \
   ResetBuffer()
+#define AssertCallbackEquals(expected) \
+  ck_assert_str_eq(actualCallback, (expected)); \
+  ResetCallback()
+
+extern Allocator stringStorageEntriesAllocator;
+//extern MemoryPool stringStorageEntries;
+//extern MemoryPool stringStorageMetadatas;
+//extern MemoryPool stringWrappers;
+//extern MemoryPool stringStorageEntriesData;
+//extern MemoryPool stringStorageMetadatasData;
+//extern MemoryPool stringWrappersData;
+//extern MemoryPool stringStorageEntriesFree;
+//extern MemoryPool stringStorageMetadatasFree;
+//extern MemoryPool stringWrappersFree;
+
 
 #suite requestHandler
+
 
 #test handleWriteReadT
     OmiParser pa;
@@ -45,15 +76,18 @@ Printf get(int i) {
     Path* path;
     OdfTree odf;
     OdfTree_init(&odf);
+    //LatestValuesAllocator.free = LatestValue_destroy;
+    Allocator latestValueFreer = (Allocator){.free = (FreeF) LatestValue_destroy};
     OdfParserEvent e = OdfParserEvent(PE_Path, NULL);
     
     ck_assert_str_eq(tree.sortedPaths[0].odfId, "Objects");
-    path = addPath(&odf, "Objects");
-    ck_assert_int_eq(handleWrite(p, path, e), Err_OK);
+    Path Objects;
+    Path_init(&Objects, 1, OdfObject, NULL, "Objects", 0);
+    ck_assert_int_eq(handleWrite(p, &Objects, e), Err_OK);
     
-    OmiParser_pushPath(p, "MyObject", 0);
+    OmiParser_pushPath(p, "MyObject", OdfObject);
     ck_assert_str_eq(tree.sortedPaths[1].odfId, "MyObject");
-    OmiParser_pushPath(p, "MyItem", PF_IsInfoItem);
+    OmiParser_pushPath(p, "MyItem", OdfInfoItem);
     ck_assert_str_eq(tree.sortedPaths[2].odfId, "MyItem");
     ck_assert_int_eq(tree.size, 3);
     //handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_Path, NULL));
@@ -65,13 +99,13 @@ Printf get(int i) {
     ck_assert_int_eq(handleWrite(p, path, e), Err_OOM_String);
     ck_assert_int_eq(tree.size, 3);
 
-    stringStorage.alloc = &stdAllocator;
+    stringStorage.alloc = &stringStorageEntriesAllocator;
     path = addPath(&odf, "Objects/UnknownParent/Fail2");
     ck_assert_int_eq(handleWrite(p, path, e), Err_InternalError);
     ck_assert_int_eq(tree.size, 3);
 
     path = addPath(&odf, "Objects/MyObject/Fail3");
-    path->flags |= PF_IsInfoItem;
+    PathSetNodeType(path, OdfInfoItem);
     int freeCount = LatestValues.freeCount;
     LatestValues.freeCount = 0;
     ck_assert_int_eq(handleWrite(p, path, e), Err_OOM);
@@ -94,17 +128,27 @@ Printf get(int i) {
     // Values
     int resultIndex = 0;
     path = addPath(&odf, "Objects/MyObject/description");
-    path->flags |= PF_IsDescription | PF_ValueMalloc;
+    PathSetNodeType(path, OdfDescription);
+    path->flags |= PF_ValueMalloc;
     // Quick error cases here
     ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueUnixTime, stra("10"))), Err_InternalError);
     ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueDateTime, stra("10"))), Err_InternalError);
+    ck_assert(!stringExists("description"));
     // The real description
-    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_Path, stra("My description"))), Err_OK);
+    ck_assert(!odfBinarySearch(&tree, path, &resultIndex));
+    ck_assert_int_eq(tree.size, 3);
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_Path, ("My description"))), Err_OK); // not allocating the data because hard to free in test
     ck_assert(odfBinarySearch(&tree, path, &resultIndex));
+    ck_assert(stringExists("description"));
+    ck_assert(stringExists("MyObject"));
     ck_assert_str_eq(tree.sortedPaths[resultIndex].value.str, "My description");
+    ck_assert_int_eq(tree.size, 4);
     
-    path = addPath(&odf, "Objects/MyObject/MyItem");
-    path->flags |= V_String | PF_IsInfoItem;
+    Path * MyItem = addPath(&odf, "Objects/MyObject/MyItem");
+    MyItem->flags |= V_String;
+    PathSetNodeType(MyItem, OdfInfoItem);
+    path = MyItem;
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_Path, NULL)), Err_OK);
     ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueUnixTime, stra("1234567"))), Err_OK);
     ck_assert(odfBinarySearch(&tree, path, &resultIndex));
     ck_assert_int_eq(tree.sortedPaths[resultIndex].value.latest->upcoming.timestamp, 1234567);
@@ -117,13 +161,12 @@ Printf get(int i) {
 
     ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueData, stra("my value"))), Err_OK);
     ck_assert_str_eq(tree.sortedPaths[resultIndex].value.latest->current.value.str, "my value");
-    char * oldValue = tree.sortedPaths[resultIndex].value.latest->current.value.str;
     ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueData, stra("my new value"))), Err_OK);
     ck_assert_str_eq(tree.sortedPaths[resultIndex].value.latest->current.value.str, "my new value");
-    free(oldValue); // FIXME: temporary free before handleDelete is implemented
     free(tree.sortedPaths[resultIndex].value.latest->current.value.str);
 
-    path->flags |= V_Int | PF_IsInfoItem;
+    path->flags = (path->flags & ~PF_ValueType) | V_Int;
+    PathSetNodeType(path, OdfInfoItem);
     path->value.i = 20;
     handleWrite(p, path, OdfParserEvent(PE_ValueUnixTime, stra("1234567")));
     ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueData, NULL)), Err_OK);
@@ -145,8 +188,10 @@ Printf get(int i) {
 
 
     // Read
-    path = addPath(&odf, "Objects");
-    handleRead(p, path, OdfParserEvent(PE_Path, NULL));
+    p->parameters.requestType = OmiRead;
+
+    //path = addPath(&odf, "Objects");
+    handleRead(p, &Objects, OdfParserEvent(PE_Path, NULL));
     AssertResponseEquals(
       "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/2.0/\" version=\"2.0\" ttl=\"10\">"
       "<response><result msgformat=\"odf\"><return returnCode=\"200\"/><msg>"
@@ -164,26 +209,27 @@ Printf get(int i) {
 
     // Add one extra item at current level
     OmiParser_popPath(p);
-    OmiParser_pushPath(p, "MyItem2", PF_IsInfoItem);
+    OmiParser_pushPath(p, "MyItem2", OdfInfoItem);
     handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueUnixTime, stra("1234567")));
     handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueData, stra("my value")));
     // Add one extra object at the same level
     OmiParser_popPath(p);
-    OmiParser_pushPath(p, "MySubObject", 0);
+    OmiParser_pushPath(p, "MySubObject", OdfObject);
     handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_Path, NULL));
     // Add one extra object at upper level
     OmiParser_popPath(p);
     OmiParser_popPath(p);
-    OmiParser_pushPath(p, "MyObject2", 0);
+    OmiParser_pushPath(p, "MyObject2", OdfObject);
     handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_Path, NULL));
     ResetBuffer();
 
-    p->lastPath = NULL;
+    p->parameters.lastPath = NULL;
     path = addPath(&odf, "Objects");
     handleRead(p, path, OdfParserEvent(PE_Path, stra("ignored")));
     path = addPath(&odf, "Objects/MyObject");
     handleRead(p, path, OdfParserEvent(PE_Path, NULL));
     path = addPath(&odf, "Objects/MyObject/MyItem");
+    PathSetNodeType(path, OdfInfoItem);
     handleRead(p, path, OdfParserEvent(PE_Path, NULL));
     path = addPath(&odf, "Objects/MyObject2");
     handleRead(p, path, OdfParserEvent(PE_Path, NULL));
@@ -192,10 +238,11 @@ Printf get(int i) {
       "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/2.0/\" version=\"2.0\" ttl=\"10\">"
       "<response><result msgformat=\"odf\"><return returnCode=\"200\"/><msg>"
       "<Objects xmlns=\"http://www.opengroup.org/xsd/odf/2.0/\" version=\"2.0\">"
-      "<Object><id>MyObject</id>"
-      "<InfoItem name=\"MyItem\">"
-      "<value unixTime=\"1234567\" type=\"xs:int\">20</value></InfoItem>"
-      "</Object>"
+        "<Object><id>MyObject</id>"
+          "<InfoItem name=\"MyItem\">"
+            "<value unixTime=\"1234567\" type=\"xs:int\">20</value></InfoItem>"
+        "</Object>"
+        "<Object><id>MyObject2</id></Object>"
       "</Objects></msg></result></response></omiEnvelope>"
     );
 
@@ -204,13 +251,14 @@ Printf get(int i) {
     ck_assert_int_eq(handleRequestPath(p, NULL, OdfParserEvent(PE_ValueData, stra("ignored"))), Err_InternalError);
 
     //description
-    p->lastPath = NULL;
+    p->parameters.lastPath = NULL;
     path = addPath(&odf, "Objects");
     // via handleRequestPath
     handleRead(p, path, OdfParserEvent(PE_Path, stra("ignored")));
     path = addPath(&odf, "Objects/MyObject");
     handleRead(p, path, OdfParserEvent(PE_Path, NULL));
     path = addPath(&odf, "Objects/MyObject/description");
+    PathSetNodeType(path, OdfDescription);
     handleRead(p, path, OdfParserEvent(PE_Path, NULL));
     handleRead(p, NULL, OdfParserEvent(PE_RequestEnd, stra("ignored")));
     AssertResponseEquals(
@@ -224,8 +272,324 @@ Printf get(int i) {
     );
 
 
-    //Allocator latestValueFreer = (Allocator){.free = LatestValue_destroy};
+
+    OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
+    OdfTree_init(&tree);
+    // Write Meta + description
+    p->parameters.requestType = OmiWrite;
+    OmiParser_popPath(p);
+    ck_assert_str_eq(p->currentOdfPath->odfId, "Objects");
+    OmiParser_pushPath(p, "MyObject", OdfObject);
+    OmiParser_pushPath(p, "MyItem", OdfInfoItem);
+    //OmiParser_pushPath(p, "description", OdfDescription);
+    ck_assert_int_eq(handleWrite(p, Path_init(p->currentOdfPath+1,
+      PathGetDepth(p->currentOdfPath)+1, OdfDescription,
+      p->currentOdfPath, "description", 0),
+      OdfParserEvent(PE_Path, ("Info desc."))// not allocating the data because hard to free in test
+    ), Err_OK);
+    //OmiParser_popPath(p);
+    OmiParser_pushPath(p, "MetaData", OdfMetaData);
+    OmiParser_pushPath(p, "metaitem", OdfInfoItem);
+    ck_assert_int_eq(handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueUnixTime, stra("1234"))), Err_OK);
+    ck_assert_int_eq(handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueData, stra("meta"))), Err_OK);
+    OmiParser_popPath(p);
+    OmiParser_popPath(p);
+    handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueUnixTime, stra("1234567")));
+    handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueData, stra("my value")));
+    OmiParser_popPath(p);
+    OmiParser_popPath(p);
+
+
+    // Read Meta + description
+    ResetBuffer();
+    p->parameters.version = OmiV1; // shorter
+    p->parameters.lastPath = NULL;
+    p->parameters.requestType = OmiRead;
+    ck_assert_str_eq(p->currentOdfPath->odfId, "Objects");
+    handleRead(p, p->currentOdfPath, OdfParserEvent(PE_Path, NULL));
+    OmiParser_pushPath(p, "MyObject", OdfObject);
+    AssertResponseEquals(
+      "<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\">"
+      "<response><result msgformat=\"odf\"><return returnCode=\"200\"/>"
+      "<msg><Objects xmlns=\"odf.xsd\" version=\"1.0\">"
+      );
+    OmiParser_pushPath(p, "MyItem", OdfInfoItem);
+    ck_assert_int_eq(handleRead(p, Path_init(p->currentOdfPath+1,
+      PathGetDepth(p->currentOdfPath)+1, OdfDescription,
+      p->currentOdfPath, "description", 0),
+      OdfParserEvent(PE_Path, NULL)
+    ), Err_OK);
+    OmiParser_pushPath(p, "MetaData", OdfMetaData);
+    OmiParser_popPath(p);
+    OmiParser_popPath(p);
+    OmiParser_popPath(p);
+
+    handleRead(p, NULL, OdfParserEvent(PE_RequestEnd, NULL));
+    AssertResponseEquals(
+    "<Object><id>MyObject</id>"
+      "<InfoItem name=\"MyItem\">"
+        "<description>Info desc.</description>"
+        "<MetaData>"
+          "<InfoItem name=\"metaitem\"><value unixTime=\"1234\" type=\"xs:string\">meta</value></InfoItem>"
+        "</MetaData>"
+        "<value unixTime=\"1234567\" type=\"xs:string\">my value</value>"
+      "</InfoItem></Object>"
+      "</Objects></msg></result></response></omiEnvelope>");
+
+
     //OdfTree_destroy(&tree, &stdAllocator, &latestValueFreer);
-    OdfTree_destroy(&tree, &stdAllocator, &LatestValuesAllocator);
+    OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
+    OdfTree_init(&tree);
+
+    // Test for object closing bug
+    path = addPath(&tree, "Objects/MyObject/ObjA/description");
+    PathSetNodeType(path, OdfDescription);
+    path->value.str = "A";
+    path = addPath(&tree, "Objects/MyObject/ObjB/description");
+    PathSetNodeType(path, OdfDescription);
+    path->value.str = "B";
+
+    p->parameters.lastPath = NULL;
+    path = addPath(&odf, "Objects");
+    handleRead(p, path, OdfParserEvent(PE_Path, NULL));
+    path = addPath(&odf, "Objects/MyObject");
+    handleRead(p, path, OdfParserEvent(PE_Path, NULL));
+    handleRead(p, NULL, OdfParserEvent(PE_RequestEnd, NULL));
+    AssertResponseEquals(
+      "<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\">"
+      "<response><result msgformat=\"odf\"><return returnCode=\"200\"/>"
+      "<msg><Objects xmlns=\"odf.xsd\" version=\"1.0\">"
+      "<Object><id>MyObject</id>"
+        "<Object><id>ObjA</id></Object>"
+        "<Object><id>ObjB</id></Object>"
+      "</Object>"
+      "</Objects></msg></result></response></omiEnvelope>");
+    
+
+    OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
     OmiParser_destroy(p);
+
+
+    // Event Subscription
+    OmiParser_init(p, 0);
+    p->odfCallback = handleRequestPath;
+    p->parameters = (OmiRequestParameters){
+      .requestType = OmiWrite,
+      .version = OmiV1,
+      .arrival = 1000,
+      .deadline = 1010,
+      .callbackAddr = stra("\x0A"),
+      .connectionId = 0
+      };
+    connectionHandler.getPrintfForConnection = get;
+    OdfTree_init(&tree);
+    ResetBuffer();
+    ResetCallback();
+
+    // Write InfoItem
+    ck_assert_str_eq(p->currentOdfPath->odfId, "Objects");
+    OmiParser_pushPath(p, "MyObject", OdfObject);
+    OmiParser_pushPath(p, "MyItem", OdfInfoItem);
+    ck_assert_int_eq(handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueUnixTime, stra("1234"))), Err_OK);
+    ck_assert_int_eq(handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueData, stra("1"))), Err_OK);
+    //handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueUnixTime, stra("1234567")));
+    //handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueData, stra("my value")));
+    OmiParser_popPath(p);
+    OmiParser_popPath(p);
+    handleWrite(p, NULL, OdfParserEvent(PE_RequestEnd, NULL));
+    AssertResponseEquals(
+    "<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\">"
+    "<response><result><return returnCode=\"200\"/></result></response></omiEnvelope>");
+    
+    // Subscription request
+    p->parameters.requestType = OmiSubscribe;
+    p->parameters.lastPath = NULL;
+    p->parameters.interval = -1;
+    p->parameters.connectionId = 2;
+    path = addPath(&odf, "Objects");
+    e = OdfParserEvent(PE_Path, NULL);
+    handleRead(p, path, e);
+    handleRead(p, NULL, OdfParserEvent(PE_RequestEnd, NULL));
+    AssertCallbackEquals(
+    "<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\">"
+    "<response><result><return returnCode=\"200\"/><requestID>1</requestID></result></response></omiEnvelope>");
+    AssertResponseEquals("");
+
+    HandlerInfo * handler = tree.sortedPaths[2].value.latest->writeHandler;
+    ck_assert_ptr_ne((void*)handler, NULL);
+    ck_assert_int_eq(handler->handlerType, HT_Subscription);
+    ck_assert_ptr_eq((void*)handler->handler, (void*)handleRead);
+    ck_assert_int_eq(handler->callbackInfo.version, OmiV1);
+    ck_assert_ptr_eq(handler->callbackInfo.lastPath, NULL);
+
+    // 404 subscription
+    p->parameters.lastPath = NULL;
+    handleRead(p, path, e);
+    path = addPath(&odf, "Objects/Nonexistent");
+    ck_assert_int_eq(handleRead(p, path, e), Err_NotFound);
+    //handleRead(p, NULL, OdfParserEvent(PE_RequestEnd, NULL));
+    AssertCallbackEquals(
+    "<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\">"
+    "<response><result><return returnCode=\"404\" description=\"Nonexistent; Near omiEnvelope\"/></result></response></omiEnvelope>");
+    AssertResponseEquals("");
+
+
+    // Write trigger
+    p->parameters.connectionId = 0;
+    p->parameters.lastPath = NULL;
+    p->parameters.requestType = OmiWrite;
+    ck_assert_str_eq(p->currentOdfPath->odfId, "Objects");
+    OmiParser_pushPath(p, "MyObject", OdfObject);
+    OmiParser_pushPath(p, "MyItem", OdfInfoItem);
+    ck_assert_int_eq(handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueUnixTime, stra("1235"))), Err_OK);
+    ck_assert_int_eq(handleWrite(p, p->currentOdfPath, OdfParserEvent(PE_ValueData, stra("2"))), Err_OK);
+    OmiParser_popPath(p);
+    OmiParser_popPath(p);
+    handleWrite(p, NULL, OdfParserEvent(PE_RequestEnd, NULL));
+
+    AssertResponseEquals(
+    "<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\">"
+    "<response><result><return returnCode=\"200\"/></result></response></omiEnvelope>");
+    AssertCallbackEquals(
+      "<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\"><response><result msgformat=\"odf\">"
+      "<return returnCode=\"200\"/><msg><Objects xmlns=\"odf.xsd\" version=\"1.0\">"
+      "<Object><id>MyObject</id><InfoItem name=\"MyItem\">"
+      "<value unixTime=\"1235\" type=\"xs:string\">2</value>"
+      "</InfoItem></Object></Objects></msg></result></response></omiEnvelope>");
+
+
+    // Another sub for the same info
+    handler->another = NULL;
+    // reuse internal path for this test
+    path = &tree.sortedPaths[2];
+    HandlerInfo * subInfo = poolAlloc(&HandlerInfoPool);
+    *subInfo = (HandlerInfo){
+        .handlerType = HT_Subscription, 
+        .callbackInfo = p->parameters, 
+        .handler = handleRead,
+        .another = NULL,
+        .nextOther = NULL,
+        .prevOther = NULL,
+        .parentPath = path,
+    };
+    subInfo->callbackInfo.requestType = OmiRead;
+    subInfo->callbackInfo.lastPath = NULL;
+    subInfo->callbackInfo.connectionId = 5;
+    HandlerInfo ** subInfoPtr = &subInfo;
+    addSubscription(NULL, path, subInfoPtr);
+    //ck_assert_ptr_ne(*subInfoPtr, subInfo);
+    ck_assert_ptr_eq(subInfo->nextOther, handler);
+    ck_assert_ptr_eq(handler->prevOther, subInfo);
+    // TODO FIXME: TEST WRITE WITH MULTIPLE SUBSCRIPTIONS ON SAME PATH
+
+
+    // Cancel
+    char* reqId = stra("x");
+    reqId[0] = (char)(subInfo - (HandlerInfo *) HandlerInfoPool.data);
+    
+    // invalid
+    ck_assert_int_eq(handleCancel(p, NULL, OdfParserEvent(PE_RequestID, NULL)), Err_InvalidElement);
+    ck_assert_int_eq(handleCancel(p, NULL, OdfParserEvent(PE_RequestID, stra("x"))), Err_NotFound);
+
+    ck_assert_ptr_ne(handler->prevOther, NULL);
+    ck_assert_int_eq(handleCancel(p, NULL, OdfParserEvent(PE_RequestID, reqId)), Err_OK);
+    ck_assert_ptr_eq(handler->prevOther, NULL);
+
+    // test correct list linking after cancel (prev->nextOther = next)
+    HandlerInfo * subInfo3 = poolAlloc(&HandlerInfoPool);
+    memcpy(subInfo3, subInfo, sizeof(*subInfo));
+    subInfoPtr = &subInfo3;
+    addSubscription(NULL, path, subInfoPtr);
+
+    HandlerInfo * subInfo2 = poolAlloc(&HandlerInfoPool);
+    *subInfo2 = (HandlerInfo){
+        .handlerType = HT_Subscription, 
+        .callbackInfo = p->parameters, 
+        .handler = handleRead,
+        .another = NULL,
+        .nextOther = NULL,
+        .prevOther = NULL,
+        .parentPath = path,
+    };
+    subInfo2->callbackInfo.requestType = OmiRead;
+    subInfo2->callbackInfo.lastPath = NULL;
+    subInfo2->callbackInfo.connectionId = 6;
+    subInfoPtr = &subInfo2;
+    addSubscription(NULL, path, subInfoPtr);
+
+    reqId = stra("x");
+    reqId[0] = (char)(subInfo - (HandlerInfo *) HandlerInfoPool.data);
+    ck_assert_int_eq(handleCancel(p, NULL, OdfParserEvent(PE_RequestID, reqId)), Err_OK);
+
+
+    OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
+    OmiParser_destroy(p);
+
+    // Test MetaData skipping with system test
+    OdfTree_init(&tree);
+    OmiParser_init(p, 0);
+
+    ck_assert_int_eq(runParser(p, 
+      "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+      "<write msgformat=\"odf\">"
+      "<msg><Objects xmlns=\"odf.xsd\">"
+      "<Object><id>MyObject</id>"
+        "<InfoItem name=\"has_meta\">"
+          "<MetaData><InfoItem name=\"a\"><value unixTime=\"10\">2</value></InfoItem></MetaData>"
+          "<value unixTime=\"10\">2</value>"
+        "</InfoItem>"
+        "<InfoItem name=\"target\">"
+          "<value unixTime=\"10\">3</value>"
+        "</InfoItem>"
+      "</Object>"
+      "</Objects></msg></write></omiEnvelope>"), Err_End);
+    OmiParser_init(p, 0);
+
+    ResetBuffer();
+    ck_assert_int_eq(runParser(p, 
+      "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+      "<read msgformat=\"odf\">"
+      "<msg><Objects xmlns=\"odf.xsd\">"
+      "<Object><id>MyObject</id>"
+        "<InfoItem name=\"has_meta\"/>"
+        "<InfoItem name=\"target\"/>"
+      "</Object>"
+      "</Objects></msg></read></omiEnvelope>"), Err_End);
+    AssertResponseEquals(
+      "<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\">"
+      "<response><result msgformat=\"odf\"><return returnCode=\"200\"/><msg>"
+      "<Objects xmlns=\"odf.xsd\" version=\"1.0\">"
+        "<Object><id>MyObject</id>"
+          "<InfoItem name=\"has_meta\">"
+            "<value unixTime=\"10\" type=\"xs:string\">2</value>"
+          "</InfoItem>"
+          "<InfoItem name=\"target\">"
+            "<value unixTime=\"10\" type=\"xs:string\">3</value>"
+          "</InfoItem>"
+        "</Object>"
+      "</Objects></msg></result></response></omiEnvelope>"
+    );
+
+
+    OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
+    OmiParser_destroy(p);
+
+#test latestValuesMiscT
+    LatestValue * v = poolAlloc(&LatestValues);
+    *v = (LatestValue){
+      .current = {.typeString = stra("destroy-test")},
+      .upcoming = {.typeString = stra("destroy-test")},
+      .writeHandler = NULL,
+    };
+    Path p = (Path){.value.latest = v};
+
+    // Test maybe unused branch
+    p.flags = PF_ValueMalloc;
+    Path * pp = &p;
+    PathSetNodeType(pp, OdfInfoItem);
+    HandlerInfo ** ptr = getHandlerInfoPtr(&p);
+    ck_assert_ptr_eq(ptr, &v->writeHandler);
+
+    // Test free, checked with valgrind/asan
+    LatestValue_destroy(&p);
 
