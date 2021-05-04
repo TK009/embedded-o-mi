@@ -6,7 +6,7 @@ if [[ $1 == "debug" ]]; then
 fi
 
 watch.sh 'src/* test/* Makefile' "\
- make all test && make coverage-html; \
+ make -j all test && make coverage-html; \
  make --always-make --dry-run \
  | grep -wE 'clang' \
  | grep -w '\-c' \

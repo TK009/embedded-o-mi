@@ -1,11 +1,15 @@
 
-TARGET_ARCH =
-BASEFLAGS = `pkg-config --cflags check`
-TESTFLAGS = -fprofile-instr-generate -fcoverage-mapping -fsanitize=address -fno-omit-frame-pointer -fsanitize-address-use-after-scope -fsanitize=undefined
+
+#ESP32S2JS := $(LIBDIR)/esp32s2/libjerry-core.a $(LIBDIR)/esp32s2/libjerry-ext.a
+#BASEFLAGS = 
+TESTFLAGS = `pkg-config --cflags check` -fprofile-instr-generate -fcoverage-mapping -fsanitize=address -fno-omit-frame-pointer -fsanitize-address-use-after-scope -fsanitize=undefined
 DEBUGFLAGS ?= $(TESTFLAGS) -g -Wall -Wextra -Wno-gnu-statement-expression -pedantic -Wno-empty-translation-unit -Wno-gnu-folding-constant
 ASAN_OPTIONS=strict_string_checks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1
 #-Wno-reorder
 OPTIMIZE = #-O3 -flto
+
+# not used...
+TARGET_ARCH =
 
 
 CXXSTD = -std=c++14 
@@ -22,6 +26,7 @@ SRCDIR  := src
 OBJDIR  := obj
 BINDIR  := bin
 TESTDIR := test
+LIBDIR  := lib
 
 vpath $(SRCDIR) $(TESTDIR)
 
@@ -40,24 +45,26 @@ TESTRESULTS = $(addsuffix .log,$(basename $(TESTBINARIES)))
 TESTDATA = $(addsuffix .profraw,$(basename $(TESTBINARIES)))
 
 
-HEADERS = -iquote $(SRCDIR) -iquote $(OBJDIR)
+HEADERS = -iquote $(SRCDIR) -iquote $(OBJDIR) -I./jerryscript/jerry-core/include/ -I./jerryscript/jerry-ext/include/
 #HEADERS = -I $(SRCDIR) -I $(OBJDIR)
 CXXFLAGS = $(CXXSTD) $(HEADERS) $(DEBUGFLAGS) $(OPTIMIZE)
 CFLAGS = $(CSTD) $(HEADERS) $(DEBUGFLAGS) $(OPTIMIZE)
 
 
 
-LDFLAGS = # -static-libstdc++
-LDTESTFLAGS = `pkg-config --libs check` -fprofile-instr-generate -fcoverage-mapping
+NATIVEJS := $(LIBDIR)/libjerry-core.a $(LIBDIR)/libjerry-ext.a $(LIBDIR)/libjerry-port-default.a
+LIBS := $(NATIVEJS)
+LDFLAGS = -L $(LIBDIR) -ljerry-core -ljerry-ext -ljerry-port-default #$(LIBS) # -static-libstdc++
+LDTESTFLAGS = $(LDFLAGS) `pkg-config --libs check` -fprofile-instr-generate -fcoverage-mapping
 
 #OBJECTS  := 
 
-EXECUTABLES :=  # $(BINDIR)/app
+EXECUTABLES := $(BINDIR)/core
 
 
 
 # TODO: embedded compilation
-all: core $(TESTBINARIES)
+all: $(EXECUTABLES) $(TESTBINARIES)
 	
 $(EXECUTABLES): | $(BINDIR)
 
@@ -65,6 +72,8 @@ $(EXECUTABLES): | $(BINDIR)
 $(BINDIR):
 	mkdir -p $@
 $(OBJDIR):
+	mkdir -p $@
+$(LIBDIR):
 	mkdir -p $@
 
 
@@ -118,14 +127,14 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c $(DEPDIR)/%.d | $(OBJDIR)
 .PRECIOUS: %.d $(DEPDIR)/%.d $(OBJDIR)/%.check.o $(OBJDIR)/%.check.c $(OBJDIR)/%.c $(OBJDIR)/%.log $(OBJDIR)/%.o
 
 #$(TESTBINARIES)
-$(OBJDIR)/%.test: $(OBJDIR)/%.check.o $(OBJS)
+$(OBJDIR)/%.test: $(OBJDIR)/%.check.o $(OBJS) $(LIBS)
 	@echo
 	@echo "LINKING $@!"
 	$(CC) -o $@ $(LDTESTFLAGS) $(DEBUGFLAGS) $^
 #@echo "LINKING $@ complete!"
 
 
-core: $(OBJDIR)/main.o $(OBJS)
+$(BINDIR)/core: $(OBJDIR)/main.o $(OBJS) $(LIBS)
 	@echo
 	@echo "LINKING $@!"
 	$(CC) -o $@ $(LDTESTFLAGS) $(DEBUGFLAGS) $^
@@ -186,6 +195,31 @@ debug:
 
 info:
 	@echo $(TESTRESULTS)
+
+
+# JERRY SCRIPT
+
+
+$(NATIVEJS): $(LIBDIR)
+	@echo
+	@echo MAKE JERRY SCRIPT
+	@cd jerryscript; python tools/build.py --debug --lto=OFF --strip=OFF --profile minimal --jerry-cmdline=OFF
+	@cp jerryscript/build/lib/* $(LIBDIR)/
+# parallel build fix (the first depends on the second)
+$(word 1,$(NATIVEJS)): $(word 2,$(NATIVEJS))
+$(word 2,$(NATIVEJS)): $(word 3,$(NATIVEJS))
+
+##jerryscript for esp32s2
+#$(ESP32S2JS):
+#	@echo
+#	@echo MAKE JERRY SCRIPT
+#	@cd jerryscript
+#	@python tools/build.py --builddir=$(pwd)/build/esp32s2 --toolchain=../jerryscript-toolchain-esp32.cmake --cmake-param "-GUnix Makefiles" --jerry-cmdline=OFF --jerry-port-default=OFF --lto=OFF --strip=OFF
+## parallel build fix (the first depends on the second)
+#$(word 1,$(ESP32S2JS)): $(word 2,$(ESP32S2JS))
+
+
+# DEPENDENSIES
 
 -include $(OBJS:.o=.d)
 -include $(TESTOBJS:.o=.d)

@@ -6,13 +6,20 @@ Contains a partial O-MI Node implementation for linux.
 Compiling and testing
 --------------------
 
+Remember to clone git submodules!
+
+### Computer test version
 Desktop version compiled with `clang` for better error messages and fast unit testing.
 
-* `make esp32-upload` to compile to esp32 WiFi SoC and upload to `PORT`
 * `make test` to compile and run desktop version tests and show coverage
-* `make core` Desktop version is compiled to `./core` but it only works by taking the
+* `make core` Desktop command line version is compiled to `./core` but it only works by taking the
    requests in standard input and responds with standard output. For http
    server it needs to be run with (python3) `./embedded-o-mi-testserver.py`
+
+### ESP32 S2
+
+* TODO
+* `make esp32-upload` to compile to esp32 WiFi SoC and upload to `PORT`
 * `make esp32` to only compile esp32 version
 
 
