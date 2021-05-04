@@ -1,7 +1,7 @@
 
 TARGET_ARCH =
 BASEFLAGS = `pkg-config --cflags check`
-TESTFLAGS = -fprofile-instr-generate -fcoverage-mapping -fsanitize=address -fno-omit-frame-pointer -fsanitize-address-use-after-scope
+TESTFLAGS = -fprofile-instr-generate -fcoverage-mapping -fsanitize=address -fno-omit-frame-pointer -fsanitize-address-use-after-scope -fsanitize=undefined
 DEBUGFLAGS ?= $(TESTFLAGS) -g -Wall -Wextra -Wno-gnu-statement-expression -pedantic -Wno-empty-translation-unit -Wno-gnu-folding-constant
 ASAN_OPTIONS=strict_string_checks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1
 #-Wno-reorder
@@ -79,7 +79,8 @@ $(OBJDIR)/%.c: $(SRCDIR)/%.py
 $(OBJDIR)/%.h: $(SRCDIR)/%.py
 	./$< h > $@
 
-
+# fix clean compile by providing some deps manually:
+$(OBJDIR)/OdfTree.o: $(OBJDIR)/OmiConstants.h
 
 # DEPS, FIXME: hardcoded to $(OBJDIR) by using $@
 DEPDIR := $(OBJDIR)
@@ -114,7 +115,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c $(DEPDIR)/%.d | $(OBJDIR)
 
 %.d: ;
 
-.PRECIOUS: %.d $(DEPDIR)/%.d $(OBJDIR)/%.check.o $(OBJDIR)/%.check.c $(OBJDIR)/%.log $(OBJDIR)/%.o
+.PRECIOUS: %.d $(DEPDIR)/%.d $(OBJDIR)/%.check.o $(OBJDIR)/%.check.c $(OBJDIR)/%.c $(OBJDIR)/%.log $(OBJDIR)/%.o
 
 #$(TESTBINARIES)
 $(OBJDIR)/%.test: $(OBJDIR)/%.check.o $(OBJS)

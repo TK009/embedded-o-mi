@@ -40,9 +40,9 @@ void* poolAlloc(MemoryPool *pool) {
     }
 
     // Find actual slot in block
-    int bitLocation = first0Bit(block);
+    int bitLocation = block != 0x7FFFFFFF? first0Bit(block): 31; // fix undefined behaviour (negation: -INT_MIN, underflow: INT_MIN - 1)
     int memoryOffset = (BlockSize * blockNum + bitLocation) * pool->elementSize;
-    pool->reservedBitArray[blockNum] ^= 1 << bitLocation;
+    pool->reservedBitArray[blockNum] ^= 1u << bitLocation;
     pool->freeCount--;
     pool->currentBlock = blockNum;
 
@@ -63,7 +63,7 @@ bool poolExists(MemoryPool *pool, void* element) {
         ushort blockNum = elementNumber / BlockSize;
         int bitLocation = elementNumber - blockNum * BlockSize;
 
-        return pool->reservedBitArray[blockNum] & (1 << bitLocation);
+        return pool->reservedBitArray[blockNum] & (1u << bitLocation);
     }
     return false;
 }
@@ -77,7 +77,7 @@ void poolFree_(MemoryPool *pool, void** element) {
         int bitLocation = elementNumber - blockNum * BlockSize;
 
         //if (pool->reservedBitArray[blockNum] & (1 << bitLocation)) {
-        pool->reservedBitArray[blockNum] ^= 1 << bitLocation;
+        pool->reservedBitArray[blockNum] ^= 1u << bitLocation;
         pool->freeCount++;
         //}
         *element = NULL;

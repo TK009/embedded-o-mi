@@ -65,6 +65,9 @@
     ck_assert_int_eq(first1Bit(19904), 6);
     ck_assert_int_eq(first1Bit(0xFFFFFFFF), 0);
     ck_assert_int_eq(first0Bit(0xFFFF0FFF), 12);
+    ck_assert_int_eq(first0Bit(0), 0);
+    // Undefined behaviour: negation of -2147483648 cannot be represented in type 'int', signed integer overflow: -2147483648 - 1
+    //ck_assert_int_eq(first0Bit(0x7FFFFFFF), 31);
 
     HString strA, strB, costarring, liquid;
     HString_init(&strA, "TestA");
