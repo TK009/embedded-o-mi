@@ -38,7 +38,8 @@ const char * storeHString(const HString *str) {
             return NULL;
         }
         char * copiedStr = StringAllocator(str->length+1);
-        copiedStr = strcpy(copiedStr, str->value);
+        copiedStr = strncpy(copiedStr, str->value, str->length);
+        copiedStr[str->length] = '\0';
         newStringWrapper->value = copiedStr;
         return copiedStr;
     }

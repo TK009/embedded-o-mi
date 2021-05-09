@@ -71,6 +71,8 @@ typedef enum ErrorResponse {
     Err_OOM                 = 8,
     Err_NotImplemented      = 9,
     Err_NotFound            = 10,
+    Err_ScriptParse         = 11,
+    Err_ScriptRun           = 12,
 } ErrorResponse;
 
 typedef enum OdfParserEventType {
@@ -157,7 +159,7 @@ typedef struct HandlerInfo HandlerInfo;
 struct HandlerInfo {
     HandlerType handlerType;
     OdfPathCallback handler;
-    Path * parentPath;
+    //Path * parentPath;
     HandlerInfo * another; // next same sub
     HandlerInfo * prevOther; // previous different sub for the same path
     HandlerInfo * nextOther; // next different sub for the same path

@@ -13,6 +13,7 @@ extern Allocator LatestValuesAllocator;
 extern MemoryPool LatestValues;
 void LatestValue_destroy(Path * p);
 
+void RequestHandler_init();
 ErrorResponse handleRequestPath(OmiParser *p, Path *path, OdfParserEvent event);
 ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event);
 ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event);

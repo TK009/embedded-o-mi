@@ -1,2 +1,4 @@
 -iquote obj
 -iquote src
+-Ijerryscript/jerry-core/include/
+-Ijerryscript/jerry-ext/include/

@@ -75,12 +75,13 @@
 
 #test addPathT
     OdfTree odf;
-    OdfTree_init(&odf);
+    Path paths[20];
+    OdfTree_init(&odf, paths, 20);
 
     ck_assert_int_eq(odf.size, 1);
     
     //char * path = "Objects/MyObject/MyInfoItem"
-    const Path* myItem = addPath(&odf, "Objects/MyObject/MyInfoItem");
+    const Path* myItem = addPath(&odf, "Objects/MyObject/MyInfoItem", OdfInfoItem);
 
     ck_assert_int_eq(odf.size, 3);
 
@@ -91,7 +92,7 @@
     // Depth
     ck_assert_uint_eq(st.depth, OdfDepth(1, OdfObject));
     ck_assert_uint_eq(nd.depth, OdfDepth(2, OdfObject));
-    ck_assert_uint_eq(rd.depth, OdfDepth(3, OdfObject));
+    ck_assert_uint_eq(rd.depth, OdfDepth(3, OdfInfoItem));
 
     // Parent
     ck_assert_ptr_eq(st.parent, NULL);
@@ -118,15 +119,15 @@
     
 
     // Re-add the same path should only return the pointer to it
-    const Path* myItemAgain = addPath(&odf, "Objects/MyObject/MyInfoItem");
+    const Path* myItemAgain = addPath(&odf, "Objects/MyObject/MyInfoItem", OdfInfoItem);
 
     ck_assert_int_eq(odf.size, 3);
     
     ck_assert_ptr_eq(myItem, myItemAgain);
 
     // Test that array insert works in the middle (_move)
-    const Path* myMiddleItem = addPath(&odf, "Objects/AnObj/MyInfoItem");
-    myItemAgain = addPath(&odf, "Objects/MyObject/MyInfoItem");
+    const Path* myMiddleItem = addPath(&odf, "Objects/AnObj/MyInfoItem", OdfInfoItem);
+    myItemAgain = addPath(&odf, "Objects/MyObject/MyInfoItem", OdfInfoItem);
 
     ck_assert_ptr_ne(myItemAgain, myMiddleItem);
 
@@ -162,15 +163,48 @@
 
     ck_assert_int_eq(odf.size, 4);
     odf.capacity = 4;
-    ck_assert_ptr_eq(addPath(&odf, "Objects/MyObject/MyInfoItem2"), NULL);
+    ck_assert_ptr_eq(addPath(&odf, "Objects/MyObject/MyInfoItem2", OdfInfoItem), NULL);
 
 #test memoryOffsetProblemT
     char* expectedPath = "Objects/Object1/description";
-    OdfTree odf; char p1[50];
-    OdfTree_init(&odf);
-    Path * expected = addPath(&odf, expectedPath);
+    OdfTree odf; Path paths[20]; char p1[50];
+    OdfTree_init(&odf, paths, 20);
+    Path * expected = addPath(&odf, expectedPath, OdfDescription);
     memcpy(p1, expected->odfId, expected->odfIdLength);
     p1[expected->odfIdLength] = '\0';
     ck_assert_str_eq(p1, "description");
     
+
+#test ExtraSlashT
+    OdfTree odf;
+    Path paths[20];
+    OdfTree_init(&odf, paths, 20);
+
+    ck_assert_int_eq(odf.size, 1);
+    
+    addPath(&odf, "/Objects/MyObject/MyInfoItem", OdfInfoItem);
+
+    ck_assert_int_eq(odf.size, 3);
+
+    const Path st = odf.sortedPaths[0];
+    const Path nd = odf.sortedPaths[1];
+    const Path rd = odf.sortedPaths[2];
+
+    // Depth
+    ck_assert_uint_eq(st.depth, OdfDepth(1, OdfObject));
+    ck_assert_uint_eq(nd.depth, OdfDepth(2, OdfObject));
+    ck_assert_uint_eq(rd.depth, OdfDepth(3, OdfInfoItem));
+
+    // Parent
+    ck_assert_ptr_eq(st.parent, NULL);
+    ck_assert_ptr_eq(nd.parent, odf.sortedPaths+0);
+    ck_assert_ptr_eq(rd.parent, odf.sortedPaths+1);
+
+    // Id&len
+    ck_assert_uint_eq(st.odfIdLength, strlen("Objects"));
+    ck_assert_mem_eq(st.odfId, "Objects", st.odfIdLength);
+    ck_assert_uint_eq(nd.odfIdLength, strlen("MyObject"));
+    ck_assert_mem_eq(nd.odfId, "MyObject", nd.odfIdLength);
+    ck_assert_uint_eq(rd.odfIdLength, strlen("MyInfoItem"));
+    ck_assert_mem_eq(rd.odfId, "MyInfoItem", rd.odfIdLength);
 

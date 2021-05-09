@@ -1,0 +1,324 @@
+// vim: syntax=c
+#include "ScriptEngine.h"
+#include "requestHandler.h"
+#include "StringStorage.h"
+#include "testUtils.h"
+
+char actualResponse[2048]; // max response size for tests
+char * bufferLocation = actualResponse;
+char actualCallback[2048]; // max response size for tests
+char * callbackLocation = actualCallback;
+int saveActualResponse(const char * format, ...) {
+  va_list argptr;
+  va_start(argptr, format);
+  int ret = vsprintf(bufferLocation, format, argptr);
+  if (ret > 0) bufferLocation += ret;
+  return 0;
+}
+int saveActualCallback(const char * format, ...) {
+  va_list argptr;
+  va_start(argptr, format);
+  int ret = vsprintf(callbackLocation, format, argptr);
+  if (ret > 0) callbackLocation += ret;
+  return 0;
+}
+
+Printf get(int i) {
+  if (i==2)
+    return saveActualCallback;
+  return saveActualResponse;
+}
+
+#define ResetBuffer() bufferLocation = actualResponse; bufferLocation[0] = '\0'
+#define ResetCallback() callbackLocation = actualCallback; callbackLocation[0] = '\0'
+#define AssertResponseEquals(expected) \
+  ck_assert_str_eq(actualResponse, (expected)); \
+  ResetBuffer()
+#define AssertCallbackEquals(expected) \
+  ck_assert_str_eq(actualCallback, (expected)); \
+  ResetCallback()
+
+ErrorResponse handleScript(OmiParser *p, Path *path, OdfParserEvent event);
+
+#suite ScriptEngine
+
+#test ScriptEngineT
+  Allocator latestValueFreer = (Allocator){.free = (FreeF) LatestValue_destroy};
+  HString scriptInstance;
+  HString *script = &scriptInstance;
+  // tests that external context is configured correctly
+  ck_assert_int_eq(ScriptEngine_init(), 0);
+
+  ck_assert_int_eq(ScriptEngine_testParse(HString_init(script, "\"Hello World!\";")), 0);
+  ck_assert_int_eq(ScriptEngine_testParse(HString_init(script, "var x = 'Hello World!';")), 0);
+  ck_assert_int_eq(ScriptEngine_testParse(HString_init(script, "varx'Hello World!';")), Err_ScriptParse);
+
+  OmiParser pa;
+  OmiParser *p = &pa;
+  OmiParser_init(p, 0);
+  connectionHandler.getPrintfForConnection = get;
+  p->parameters = (OmiRequestParameters){
+    .requestType = OmiWrite,
+    .version = OmiV1,
+    .arrival = 1000,
+    .deadline = 1010,
+    .connectionId = 0
+    };
+  
+  Path paths[20]; 
+  OdfTree odf;
+  OdfTree_init(&odf, paths, 20);
+  Path * path = addPath(&odf, "Objects/MyObject/MyItem", OdfInfoItem);
+  PathSetNodeType(path, OdfInfoItem);
+  path->flags = V_Int;
+  HandlerInfo hi = {
+      .handlerType = HT_Subscription, 
+          .callbackInfo = p->parameters, 
+          .handler = handleScript,
+          .another = NULL,
+          .nextOther = NULL,
+          .prevOther = NULL,
+          //.parentPath = storedPathSegment->parent->parent,
+  };
+  LatestValue lv = {.current = {.timestamp=1000, .value.i=8}, .writeHandler=&hi};
+  path->value.latest = &lv;
+  mark_point(); // show abort error line here if it happens
+  ck_assert_int_eq(ScriptEngine_run(NULL, path, HString_init(script, "var x = 'Hello World!';")), 0);
+  ck_assert_int_eq(ScriptEngine_run(NULL, path, HString_init(script, "var x = y;")), Err_ScriptRun);
+
+  StringStorage_init();
+  RequestHandler_init();
+
+  // writeItem errors
+  ck_assert_int_eq(ScriptEngine_run(p, path, HString_init(script, "odf.writeItem();")), Err_ScriptRun);
+  ck_assert_int_eq(ScriptEngine_run(p, path, HString_init(script, "odf.writeItem(5, 5);")), Err_ScriptRun);
+  ck_assert_int_eq(ScriptEngine_run(p, path, HString_init(script, "odf.writeItem(5, '"
+    "ueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueue"
+    "ueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueue"
+    "trololololololololololololololololololololololololololololololololololololololololololololololololololololololololololol"
+    "');"
+  )), Err_ScriptRun);
+
+  ck_assert_int_eq(ScriptEngine_run(p, path, HString_init(script, "odf.writeItem(5, 'Objects/MyObject/MyItem');")), 0);
+  ck_assert_int_eq(tree.size, 3);
+  ck_assert_str_eq(tree.sortedPaths[0].odfId, "Objects");
+  ck_assert_str_eq(tree.sortedPaths[1].odfId, "MyObject");
+  ck_assert_str_eq(tree.sortedPaths[2].odfId, "MyItem");
+  ck_assert_double_eq(tree.sortedPaths[2].value.latest->current.value.d, 5.0);
+  ck_assert_int_eq(tree.sortedPaths[2].flags, V_Double | PF_OdfIdMalloc | PF_ValueMalloc);
+
+  ck_assert_int_eq(ScriptEngine_run(p, path, HString_init(script, "odf.writeItem(true, 'Objects/MyObject/MyItem');")), 0);
+  ck_assert(tree.sortedPaths[2].value.latest->current.value.b);
+
+  ck_assert_int_eq(ScriptEngine_run(p, path, HString_init(script, "odf.writeItem('hello', 'Objects/MyObject/MyItem');")), 0);
+  ck_assert_str_eq(tree.sortedPaths[2].value.latest->current.value.str, "hello");
+
+  ck_assert_int_eq(ScriptEngine_run(p, path, HString_init(script, "odf.writeItem({}, 'Objects/MyObject/MyItem');")), Err_ScriptRun);
+
+
+  // System test for the script addition
+
+  ck_assert_int_eq(runParser(p, 
+    "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+    "<write msgformat=\"odf\">"
+    "<msg><Objects xmlns=\"odf.xsd\">"
+    "<Object><id>MyObject</id>"
+      "<InfoItem name=\"ScriptTest\">"
+        "<MetaData><InfoItem name=\"onwrite\"><value unixTime=\"10\">"
+          "odf.writeItem(event.value + event.unixTime, '/Objects/MyObject/Result');"
+        "</value></InfoItem></MetaData>"
+        "<value unixTime=\"10\" type=\"xs:int\">2</value>"
+      "</InfoItem>"
+    "</Object>"
+    "</Objects></msg></write></omiEnvelope>"), Err_End);
+  AssertResponseEquals("<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\"><response><result><return returnCode=\"200\"/></result></response></omiEnvelope>");
+  
+  int resultIndex, scriptTestIx;
+  ck_assert(odfBinarySearch(&tree, addPath(&odf, "Objects/MyObject/ScriptTest", OdfInfoItem), &scriptTestIx));
+  ck_assert_int_eq(tree.sortedPaths[scriptTestIx].flags, V_Int | PF_OdfIdMalloc | PF_ValueMalloc);
+  ck_assert_ptr_ne(tree.sortedPaths[scriptTestIx].value.latest->writeHandler, NULL);
+  ck_assert_int_eq(tree.sortedPaths[scriptTestIx].value.latest->writeHandler->handlerType, HT_Script);
+  ck_assert(odfBinarySearch(&tree, addPath(&odf, "Objects/MyObject/Result", OdfInfoItem), &resultIndex));
+  ck_assert_double_eq(tree.sortedPaths[resultIndex].value.latest->current.value.d, 12.0);
+  ck_assert_int_eq(tree.sortedPaths[resultIndex].flags, V_Double | PF_OdfIdMalloc | PF_ValueMalloc);
+
+  OmiParser_init(p, 0);
+  ck_assert_int_eq(runParser(p, 
+    "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+    "<write msgformat=\"odf\">"
+    "<msg><Objects xmlns=\"odf.xsd\">"
+    "<Object><id>MyObject</id>"
+      "<InfoItem name=\"ScriptTest\">"
+        "<value unixTime=\"11\" type=\"xs:double\">2</value>"
+      "</InfoItem>"
+    "</Object>"
+    "</Objects></msg></write></omiEnvelope>"), Err_End);
+  AssertResponseEquals("<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\"><response><result><return returnCode=\"200\"/></result></response></omiEnvelope>");
+  ck_assert_double_eq(tree.sortedPaths[resultIndex].value.latest->current.value.d, 13.0);
+
+  OmiParser_init(p, 0);
+  ck_assert_int_eq(runParser(p, 
+    "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+    "<write msgformat=\"odf\">"
+    "<msg><Objects xmlns=\"odf.xsd\">"
+    "<Object><id>MyObject</id>"
+      "<InfoItem name=\"ScriptTest\">"
+        "<value unixTime=\"12\" type=\"xs:float\">2</value>"
+      "</InfoItem>"
+    "</Object>"
+    "</Objects></msg></write></omiEnvelope>"), Err_End);
+  ck_assert_double_eq(tree.sortedPaths[resultIndex].value.latest->current.value.d, 14.0);
+  AssertResponseEquals("<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\"><response><result><return returnCode=\"200\"/></result></response></omiEnvelope>");
+
+  OmiParser_init(p, 0);
+  ck_assert_int_eq(runParser(p, 
+    "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+    "<write msgformat=\"odf\">"
+    "<msg><Objects xmlns=\"odf.xsd\">"
+    "<Object><id>MyObject</id>"
+      "<InfoItem name=\"ScriptTest\">"
+        "<value unixTime=\"14\" type=\"xs:unsignedInt\">2</value>"
+      "</InfoItem>"
+    "</Object>"
+    "</Objects></msg></write></omiEnvelope>"), Err_End);
+  ck_assert_double_eq(tree.sortedPaths[resultIndex].value.latest->current.value.d, 16);
+  AssertResponseEquals("<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\"><response><result><return returnCode=\"200\"/></result></response></omiEnvelope>");
+
+  OmiParser_init(p, 0);
+  ck_assert_int_eq(runParser(p, 
+    "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+    "<write msgformat=\"odf\">"
+    "<msg><Objects xmlns=\"odf.xsd\">"
+    "<Object><id>MyObject</id>"
+      "<InfoItem name=\"ScriptTest\">"
+        "<value unixTime=\"15\" type=\"xs:boolean\">true</value>"
+      "</InfoItem>"
+    "</Object>"
+    "</Objects></msg></write></omiEnvelope>"), Err_End);
+  AssertResponseEquals("<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\"><response><result><return returnCode=\"200\"/></result></response></omiEnvelope>");
+  ck_assert_double_eq(tree.sortedPaths[resultIndex].value.latest->current.value.d, 16.0);
+
+  OmiParser_init(p, 0);
+  ck_assert_int_eq(runParser(p, 
+    "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+    "<write msgformat=\"odf\">"
+    "<msg><Objects xmlns=\"odf.xsd\">"
+    "<Object><id>MyObject</id>"
+      "<InfoItem name=\"ScriptTest\">"
+        "<MetaData><InfoItem name=\"onwrite\"><value unixTime=\"10\">"
+          "odf.writeItem(parseInt(event.value) + event.unixTime, 'Objects/MyObject/Result');"
+        "</value></InfoItem></MetaData>"
+        "<value unixTime=\"20\">2</value>"
+      "</InfoItem>"
+    "</Object>"
+    "</Objects></msg></write></omiEnvelope>"), Err_End);
+  AssertResponseEquals("<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\"><response><result><return returnCode=\"200\"/></result></response></omiEnvelope>");
+  ck_assert_double_eq(tree.sortedPaths[resultIndex].value.latest->current.value.d, 22.0);
+
+  // Enable if null is possible
+  //OmiParser_init(p, 0);
+  //ck_assert_int_eq(runParser(p, 
+  //  "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+  //  "<write msgformat=\"odf\">"
+  //  "<msg><Objects xmlns=\"odf.xsd\">"
+  //  "<Object><id>MyObject</id>"
+  //    "<InfoItem name=\"ScriptTest\">"
+  //      "<MetaData><InfoItem name=\"onwrite\"><value unixTime=\"10\">"
+  //        "odf.writeItem(((event.value === null)? 1 : 0) + event.unixTime, 'Objects/MyObject/Result');"
+  //      "</value></InfoItem></MetaData>"
+  //      "<value unixTime=\"21\" type=\"odf\">2</value>"
+  //    "</InfoItem>"
+  //  "</Object>"
+  //  "</Objects></msg></write></omiEnvelope>"), Err_End);
+  //AssertResponseEquals("<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\"><response><result><return returnCode=\"200\"/></result></response></omiEnvelope>");
+  //ck_assert_double_eq(tree.sortedPaths[resultIndex].value.latest->current.value.d, 22.0);
+
+  OmiParser_init(p, 0);
+  ck_assert_int_eq(runParser(p, 
+    "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+    "<write msgformat=\"odf\">"
+    "<msg><Objects xmlns=\"odf.xsd\">"
+    "<Object><id>MyObject</id>"
+      "<InfoItem name=\"Result\">"
+        "<MetaData><InfoItem name=\"onwrite\"><value unixTime=\"10\">"
+          "odf.writeItem(event.value + 100);"
+        "</value></InfoItem></MetaData>"
+        "<value unixTime=\"2000000\" type=\"xs:int\">5</value>"
+      "</InfoItem>"
+      "<InfoItem name=\"ScriptTest\">"
+        "<MetaData><InfoItem name=\"onwrite\"><value unixTime=\"10\">"
+          "odf.writeItem(event.value + event.unixTime, 'Objects/MyObject/ScriptTest');"
+          "odf.writeItem(event.value + event.unixTime, 'Objects/MyObject/Result');"
+        "</value></InfoItem></MetaData>"
+        "<value unixTime=\"22\" type=\"xs:int\">2</value>"
+      "</InfoItem>"
+    "</Object>"
+    "</Objects></msg></write></omiEnvelope>"), Err_End);
+  AssertResponseEquals("<omiEnvelope xmlns=\"omi.xsd\" version=\"1.0\" ttl=\"10\"><response><result><return returnCode=\"200\"/></result></response></omiEnvelope>");
+  ck_assert(odfBinarySearch(&tree, addPath(&odf, "Objects/MyObject/ScriptTest", OdfInfoItem), &scriptTestIx));
+  ck_assert(odfBinarySearch(&tree, addPath(&odf, "Objects/MyObject/Result", OdfInfoItem), &resultIndex));
+  ck_assert_double_eq(tree.sortedPaths[scriptTestIx].value.latest->current.value.d, 24.0);
+  ck_assert_double_eq(tree.sortedPaths[resultIndex].value.latest->current.value.d, 124.0);
+
+
+  // Invalid metadata type
+  OmiParser_init(p, 0);
+  ck_assert_int_eq(runParser(p, 
+    "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+    "<write msgformat=\"odf\">"
+    "<msg><Objects xmlns=\"odf.xsd\">"
+    "<Object><id>MyObject</id>"
+      "<InfoItem name=\"ScriptTest\">"
+        "<MetaData><InfoItem name=\"onwrite\">"
+            "<value unixTime=\"10\" type=\"xs:int\">8</value>"
+        "</InfoItem></MetaData>"
+        "<value unixTime=\"22\" type=\"xs:int\">2</value>"
+      "</InfoItem>"
+    "</Object>"
+    "</Objects></msg></write></omiEnvelope>"), Err_End);
+  // metadata
+  //addPath(&odf, "Objects/MyObject/ScriptTest/MetaData", OdfMetaData);
+  //ck_assert(odfBinarySearch(&tree, addPath(&odf, "Objects/MyObject/ScriptTest/MetaData/onwrite", OdfInfoItem), &resultIndex));
+  OmiParser_destroy(p);
+
+  // Invalid script
+  OmiParser_init(p, 0);
+  ck_assert_int_eq(runParser(p, 
+    "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+    "<write msgformat=\"odf\">"
+    "<msg><Objects xmlns=\"odf.xsd\">"
+    "<Object><id>MyObject</id>"
+      "<InfoItem name=\"ScriptTest\">"
+        "<MetaData><InfoItem name=\"onwrite\"><value unixTime=\"10\">"
+          "varx'Hello World!';"
+        "</value></InfoItem></MetaData>"
+        "<value unixTime=\"22\" type=\"xs:int\">2</value>"
+      "</InfoItem>"
+    "</Object>"
+    "</Objects></msg></write></omiEnvelope>"), Err_ScriptParse);
+  OmiParser_destroy(p);
+
+  OmiParser_init(p, 0);
+
+  ck_assert_int_eq(runParser(p, 
+    "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+    "<write msgformat=\"odf\">"
+    "<msg><Objects xmlns=\"odf.xsd\">"
+    "<Object><id>MyObject</id>"
+      "<InfoItem name=\"Overflow\">"
+        "<MetaData><InfoItem name=\"onwrite\"><value unixTime=\"10\">"
+            "'Hello World'"
+        "</value></InfoItem></MetaData>"
+        "<value unixTime=\"22\" type=\"xs:int\">2</value>"
+      "</InfoItem>"
+    "</Object>"
+    "</Objects></msg></write></omiEnvelope>"), Err_ScriptParse);
+  OmiParser_destroy(p);
+
+  mark_point();
+  ScriptEngine_destroy();
+  mark_point();
+  OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
+  mark_point();
+  OmiParser_destroy(p);
+  mark_point();

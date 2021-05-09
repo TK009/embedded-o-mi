@@ -2,9 +2,30 @@
 
 #ESP32S2JS := $(LIBDIR)/esp32s2/libjerry-core.a $(LIBDIR)/esp32s2/libjerry-ext.a
 #BASEFLAGS = 
-TESTFLAGS = `pkg-config --cflags check` -fprofile-instr-generate -fcoverage-mapping -fsanitize=address -fno-omit-frame-pointer -fsanitize-address-use-after-scope -fsanitize=undefined
+SANITIZER ?= address
+ifeq ($(SANITIZER),address)
+SANITIZER_OPT = -fsanitize=address -fsanitize-address-use-after-scope -fsanitize=undefined
+CHECKLIB=`pkg-config --libs check`
+else ifeq ($(SANITIZER),memory)
+SANITIZER_OPT = -fsanitize=memory -fno-optimize-sibling-calls -fsanitize-memory-track-origins=2 -fsanitize-blacklist=sanignore.txt #-fsanitize-ignorelist=sanignore.txt
+# check has a problem with memory san (fwrite in ppack), needs to be compiled with the ignore list:
+# wget https://github.com/libcheck/check/releases/download/0.15.2/check-0.15.2.tar.gz
+# tar xf check-0.15.2.tar.gz
+# mv check-0.15.2 check
+# ln -s ../sanignore.txt check/
+# ln -s ../../sanignore.txt check/src/
+# ln -s ../../sanignore.txt check/lib/
+# ln -s ../../sanignore.txt check/test/
+# cd check
+# ./configure CC=clang CFLAGS=$(SANITIZER_OPT)
+# make -j
+CHECKLIB=$(shell find ./check/src/.libs/ -name '*.o') #./check/src/.libs/libcheck.so
+endif
+COVERAGE = -fprofile-instr-generate -fcoverage-mapping -fno-omit-frame-pointer 
+TESTFLAGS = `pkg-config --cflags check` $(COVERAGE) $(SANITIZER_OPT)
 DEBUGFLAGS ?= $(TESTFLAGS) -g -Wall -Wextra -Wno-gnu-statement-expression -pedantic -Wno-empty-translation-unit -Wno-gnu-folding-constant
 ASAN_OPTIONS=strict_string_checks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1
+UBSAN_OPTIONS=print_stacktrace=1
 #-Wno-reorder
 OPTIMIZE = #-O3 -flto
 
@@ -17,9 +38,10 @@ CSTD = -std=c11 # -D_POSIX_C_SOURCE=200809L
 
 
 #CXX    = g++
-CC     = @clang
+CC     = @clang -fdiagnostics-color=always
 rm     = rm -f
-GDB    = ASAN_OPTIONS=detect_leaks=0 CK_FORK=no gdb
+DEBUGENV = UBSAN_OPTIONS=print_stacktrace=1 ASAN_OPTIONS=detect_leaks=0 CK_FORK=no
+DB    = gdb
 
 # change these to set the proper directories where each files shoould be
 SRCDIR  := src
@@ -45,7 +67,7 @@ TESTRESULTS = $(addsuffix .log,$(basename $(TESTBINARIES)))
 TESTDATA = $(addsuffix .profraw,$(basename $(TESTBINARIES)))
 
 
-HEADERS = -iquote $(SRCDIR) -iquote $(OBJDIR) -I./jerryscript/jerry-core/include/ -I./jerryscript/jerry-ext/include/
+HEADERS = -iquote $(SRCDIR) -iquote $(OBJDIR) -Ijerryscript/jerry-core/include/ -Ijerryscript/jerry-ext/include/
 #HEADERS = -I $(SRCDIR) -I $(OBJDIR)
 CXXFLAGS = $(CXXSTD) $(HEADERS) $(DEBUGFLAGS) $(OPTIMIZE)
 CFLAGS = $(CSTD) $(HEADERS) $(DEBUGFLAGS) $(OPTIMIZE)
@@ -54,8 +76,9 @@ CFLAGS = $(CSTD) $(HEADERS) $(DEBUGFLAGS) $(OPTIMIZE)
 
 NATIVEJS := $(LIBDIR)/libjerry-core.a $(LIBDIR)/libjerry-ext.a $(LIBDIR)/libjerry-port-default.a
 LIBS := $(NATIVEJS)
-LDFLAGS = -L $(LIBDIR) -ljerry-core -ljerry-ext -ljerry-port-default #$(LIBS) # -static-libstdc++
-LDTESTFLAGS = $(LDFLAGS) `pkg-config --libs check` -fprofile-instr-generate -fcoverage-mapping
+#LDFLAGS = -L$(LIBDIR) -ljerry-core -ljerry-ext -ljerry-port-default #$(LIBS) # -static-libstdc++
+LDFLAGS = $(LIBS) # -static-libstdc++
+LDTESTFLAGS = $(COVERAGE) $(CHECKLIB) $(LDFLAGS)
 
 #OBJECTS  := 
 
@@ -89,7 +112,7 @@ $(OBJDIR)/%.h: $(SRCDIR)/%.py
 	./$< h > $@
 
 # fix clean compile by providing some deps manually:
-$(OBJDIR)/OdfTree.o: $(OBJDIR)/OmiConstants.h
+$(OBJS): $(OBJDIR)/OmiConstants.h
 
 # DEPS, FIXME: hardcoded to $(OBJDIR) by using $@
 DEPDIR := $(OBJDIR)
@@ -126,18 +149,19 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c $(DEPDIR)/%.d | $(OBJDIR)
 
 .PRECIOUS: %.d $(DEPDIR)/%.d $(OBJDIR)/%.check.o $(OBJDIR)/%.check.c $(OBJDIR)/%.c $(OBJDIR)/%.log $(OBJDIR)/%.o
 
-#$(TESTBINARIES)
+#TODO: How to get dependencies for tests?
+#$(OBJDIR)/%.test: $(OBJDIR)/%.check.o $(OBJDIR)/%.o $(LIBS)
 $(OBJDIR)/%.test: $(OBJDIR)/%.check.o $(OBJS) $(LIBS)
 	@echo
 	@echo "LINKING $@!"
-	$(CC) -o $@ $(LDTESTFLAGS) $(DEBUGFLAGS) $^
+	$(CC) -o $@ $(DEBUGFLAGS) $(OBJS) $< $(LDTESTFLAGS)
 #@echo "LINKING $@ complete!"
-
+# save .map: -Xlinker -Map=% 
 
 $(BINDIR)/core: $(OBJDIR)/main.o $(OBJS) $(LIBS)
 	@echo
 	@echo "LINKING $@!"
-	$(CC) -o $@ $(LDTESTFLAGS) $(DEBUGFLAGS) $^
+	$(CC) -o $@ $(DEBUGFLAGS) $(OBJS) $< $(LDTESTFLAGS)
 
 
 
@@ -158,7 +182,7 @@ SHELL=/bin/bash -o pipefail
 # Run tests, maybe print backtrace, run valgrind
 $(OBJDIR)/%.log: $(OBJDIR)/%.test
 	@echo -e "\nRUNNING TEST $<"
-	@(LLVM_PROFILE_FILE="$(basename $<).profraw" ./$< | tee $@) || ($(GDB) -q -ex run -ex bt -ex "kill inferiors 1" -ex quit $<; exit 1)
+	@(LLVM_PROFILE_FILE="$(basename $<).profraw" ASAN_OPTIONS=$(ASAN_OPTIONS) ./$< | tee $@) || ($(DEBUGENV) $(DB) -q -ex run -ex bt -ex "kill inferiors 1" -ex quit $<; exit 1)
 
 #@echo -e "\nRUNNING VALGRIND" | tee -a $@
 #CK_FORK=no valgrind -q --leak-check=full $< >> $@
@@ -167,6 +191,11 @@ tags: $(SRCS)
 	ctags -R src obj
 
 NEWESTSOURCE="${SRCDIR}/$(shell ls -t ${SRCDIR} | head -1)" 
+SHOW_COVERAGE_LINES ?= 25
+COVERAGE_OPTIONS ?= --instr-profile ./obj/default.profdata  --use-color --show-expansions --show-line-counts-or-regions
+COVERAGE_FILTER ?= egrep --color=never '(\[0;41m|       \^0|\|      0\|)' -C 3 | sed 's/^--/┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅═┅/'
+#COVERAGE_FILTER ?= awk -v ctx=3 -v lastf='' '{a[++i]=$$0 "\n";} /^\[0;/ {if (lastf!=$$0){lastf=$$0;f=1;}} /(\[0;41m|       \^0|\|      0\|)/{ if (NR-lastj>ctx){for (j=0;j<95;++j) printf "┅"; print "";if (f){print lastf "[0m";f=0;}} for(j=NR-ctx;j<NR+ctx;j++){printf a[j];a[j]="";lastj=j;}}'
+#COVERAGE_FILTER ?= awk -v ctx=3 -v lastf='' '{a[++i]=$$0 "\n";} /^\[0;/ {if (lastf!=$$0){lastf=$$0;f=1;}} /(\[0;41m| {7}\^0|\| {6}0\|)/{ if (NR-lastj>ctx){for (j=0;j<95;++j) printf "┅"; print "";if (f){print lastf "[0m";f=0;}} for(j=NR-ctx;j<NR+ctx;j++){printf a[j];a[j]="";lastj=j;}}'
 
 test: $(TESTRESULTS) tags
 	@echo
@@ -174,10 +203,10 @@ test: $(TESTRESULTS) tags
 	@llvm-cov report --use-color -ignore-filename-regex='yxml*' --instr-profile=$(OBJDIR)/default.profdata $(TESTBINARIES) $(addprefix "--object=", $(TESTBINARIES)) | sed 's/-----------------------------------------//'
 	@echo
 	@echo "Some uncovered regions (search for 0 count lines if no red) in $(NEWESTSOURCE):"
-	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata $(NEWESTSOURCE) --use-color --show-expansions --show-line-counts-or-regions | egrep --color=never '(\[0;41m|   \^?0)' -C 3 | head -n 25 || true
+	@llvm-cov show $(TESTBINARIES) $(NEWESTSOURCE) $(COVERAGE_OPTIONS) | $(COVERAGE_FILTER) | head -n $(SHOW_COVERAGE_LINES) || true
 
 coverage:
-	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata
+	@llvm-cov show $(TESTBINARIES) -ignore-filename-regex='yxml*' $(COVERAGE_OPTIONS) | $(COVERAGE_FILTER)
 
 coverage-html: ${COVERAGEDIR} $(TESTRESULTS)
 	@llvm-cov show $(TESTBINARIES) --instr-profile ./obj/default.profdata --format=html --show-expansions --output-dir=${COVERAGEDIR} --ignore-filename-regex='yxml*'
@@ -188,8 +217,9 @@ coverage-html: ${COVERAGEDIR} $(TESTRESULTS)
 coverageclean:
 	@rm -f $(OBJDIR)/*.prof{raw,data} ${COVERAGEDIR}
 
+ARGS?=$(EXECUTABLES)
 debug:
-	$(GDB) $(ARGS)
+	$(DEBUGENV) $(DB) $(ARGS)
 
 .DELETE_ON_ERROR: %.o %.log
 
@@ -203,7 +233,7 @@ info:
 $(NATIVEJS): $(LIBDIR)
 	@echo
 	@echo MAKE JERRY SCRIPT
-	@cd jerryscript; python tools/build.py --debug --lto=OFF --strip=OFF --profile minimal --jerry-cmdline=OFF
+	@cd jerryscript; python tools/build.py --clean --debug --lto=OFF --strip=OFF --profile minimal --jerry-cmdline=OFF --external-context=ON
 	@cp jerryscript/build/lib/* $(LIBDIR)/
 # parallel build fix (the first depends on the second)
 $(word 1,$(NATIVEJS)): $(word 2,$(NATIVEJS))
@@ -214,7 +244,7 @@ $(word 2,$(NATIVEJS)): $(word 3,$(NATIVEJS))
 #	@echo
 #	@echo MAKE JERRY SCRIPT
 #	@cd jerryscript
-#	@python tools/build.py --builddir=$(pwd)/build/esp32s2 --toolchain=../jerryscript-toolchain-esp32.cmake --cmake-param "-GUnix Makefiles" --jerry-cmdline=OFF --jerry-port-default=OFF --lto=OFF --strip=OFF
+#	@python tools/build.py --builddir=$(pwd)/build/esp32s2 --toolchain=../jerryscript-toolchain-esp32.cmake --cmake-param "-GUnix Makefiles" --jerry-cmdline=OFF --jerry-port-default=OFF --lto=OFF --strip=OFF --external-context=ON
 ## parallel build fix (the first depends on the second)
 #$(word 1,$(ESP32S2JS)): $(word 2,$(ESP32S2JS))
 

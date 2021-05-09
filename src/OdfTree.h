@@ -33,11 +33,11 @@ typedef enum NodeType {
     OdfObject = 3,
 } NodeType;
 
-#define OdfDepth(depth, nodetype) ((depth << 2) + nodetype)
-#define PathGetDepth(p) (p->depth >> 2)
-#define PathGetNodeType(p) (p->depth & 3)
-#define PathSetNodeType(p, nodetype) (p->depth = p->depth & ~3 | nodetype)
-#define PathIsNonMeta(p) (p->depth & 2)
+#define OdfDepth(depth, nodetype) (((depth) << 2) + (nodetype))
+#define PathGetDepth(p) ((p)->depth >> 2)
+#define PathGetNodeType(p) ((p)->depth & 3)
+#define PathSetNodeType(p, nodetype) ((p)->depth = (p)->depth & ~3 | (nodetype))
+#define PathIsNonMeta(p) ((p)->depth & 2)
 #define ObjectsDepth OdfDepth(1,OdfObject)
 
 
@@ -63,20 +63,25 @@ schar pathCompare(const Path* a, const Path* b);
 //Path mkPath(char* pathString);
 
 typedef struct OdfTree {
-    Path sortedPaths[ODFTREE_SIZE];
-    //LatestValue latestValuesData[ODFTREE_SIZE];
     int size;
     int capacity;
+    Path *sortedPaths;
+    //Path sortedPaths[ODFTREE_SIZE];
+    //LatestValue latestValuesData[ODFTREE_SIZE];
 } OdfTree;
 
-OdfTree* OdfTree_init(OdfTree* self);
+OdfTree* OdfTree_init(OdfTree* self, Path* pathStorageArray, int arrayCapacity);
 void OdfTree_destroy(OdfTree* self, Allocator* idAllocator, Allocator* valueAllocator);
 
+// returns true if found, false if not found. `result` contains index of found
+// or the index of the next closest element.
 int odfBinarySearch(const OdfTree* tree, const Path* needle, int* resultIndex);
 
-Path* addPath(OdfTree* tree, const char newPath[]);
+Path* addPath(OdfTree* tree, const char pathString[], NodeType lastNodeType);
 Path* addPathSegment(OdfTree * tree, Path * segment);
 void removePathSegment(OdfTree * tree, const Path * segment);
+
+Path* copyPath(Path * source, OdfTree * destination);
 
 typedef enum ValueType {
     V_String = 0, // the default
@@ -99,7 +104,8 @@ typedef enum PathFlag {
     PF_ValueType             = 1 | 2 | 4 | 8, // For InfoItem values
     //PF_IsInfoItem            = 1 << 4, // Object tag or otherwise InfoItem or one below
     //PF_IsMetaData            = 1 << 5, // MetaData tag
-    //PF_IsDescription         = 1 << 6, // description tag
+    //PF_IsDescription         = 1 <<  , // description tag
+    PF_IsNewWithoutValue     = 1 << 6, // Path written but no value yet, suitable for interval=-2 new item subs
     PF_IsReadOnly            = 1 << 7, // write request not allowed 
     PF_HasEventSub           = 1 << 8, // write to this triggers event subscription(s)
     PF_HasPollSub            = 1 << 9, // write to this should be saved for poll

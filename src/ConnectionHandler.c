@@ -324,6 +324,12 @@ void responseFromErrorCode(OmiParser* parser, ErrorResponse err){
         case Err_NotImplemented     :
             responseFullFailure(p, 501, "Not implemented", parser);
             break;
+        case Err_ScriptParse        :
+            responseFullFailure(p, 400, "Script parsing error", parser);
+            break;
+        case Err_ScriptRun          :
+            responseFullFailure(p, 500, "Script runtime error", parser);
+            break;
         case Err_NotFound :
             break; // response started already elsewhere, handle error there
     }

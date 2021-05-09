@@ -35,10 +35,11 @@ Path* Path_init(Path* self, uchar depth, NodeType nodetype, Path* parent, OdfId 
     return self;
 }
 
-OdfTree* OdfTree_init(OdfTree* self) {
+OdfTree* OdfTree_init(OdfTree* self, Path* pathStorageArray, int arrayCapacity) {
     if (self) {
         self->size = 1;
-        self->capacity = ODFTREE_SIZE;
+        self->capacity = arrayCapacity;
+        self->sortedPaths = pathStorageArray;
         Path_init(&(self->sortedPaths[0]), 1, OdfObject, NULL, s_Objects, 0); // TODO use str constant
     }
     return self;
@@ -118,12 +119,14 @@ void _unmove(OdfTree* tree, int index) {
     }
 }
 
-Path* addPath(OdfTree* tree, const char pathString[]) {
+Path* addPath(OdfTree* tree, const char pathString[], NodeType lastNodeType) {
     const char* idStart = pathString;
     Path* parent = NULL;
 
     uchar depth = 1;
     
+    // remove extra / from the start
+    if (*pathString == '/') ++idStart;
 
     for (const char* current = pathString; *current != '\0';) {
         ++current; // increase at beginning instead of end
@@ -133,36 +136,39 @@ Path* addPath(OdfTree* tree, const char pathString[]) {
             //*current = '\0'; // odfId ending handled by odfIdLength instead
 
             int segmentLength = current - idStart;
-            // calc hash and collect variables for searching
-            strhash idHash = calcHashCodeL(idStart, segmentLength);
-            strhash parentHash = parent? parent->hashCode : 0;
-            Path newSegment = {
-                .depth = OdfDepth(depth, OdfObject),
-                .odfIdLength = (uchar) segmentLength,
-                .odfId = idStart,
-                .parent = parent,
-                .idHashCode = idHash,
-                .hashCode = idHash ^ parentHash,
-                .flags = 0
-            };
+            if (segmentLength > 0) { // remove double slashes
+                // calc hash and collect variables for searching
+                strhash idHash = calcHashCodeL(idStart, segmentLength);
+                strhash parentHash = parent? parent->hashCode : 0;
+                Path newSegment = {
+                    .depth = OdfDepth(depth, *current ? OdfObject : lastNodeType),
+                    .odfIdLength = (uchar) segmentLength,
+                    .odfId = idStart,
+                    .parent = parent,
+                    .idHashCode = idHash,
+                    .hashCode = idHash ^ parentHash,
+                    .flags = 0
+                };
 
-            parent = addPathSegment(tree, &newSegment);
-            if (!parent) return NULL;
+                parent = addPathSegment(tree, &newSegment);
+                if (!parent) return NULL;
+                ++depth;
+            }
             idStart = current + 1;
-            ++depth;
         }
     }
     return parent;
 }
 
 Path* addPathSegment(OdfTree * tree, Path * segment) {
-    if (tree->capacity <= tree->size) return NULL;
     int resultIndex;
     if (odfBinarySearch(tree, segment, &resultIndex)) {
         return &tree->sortedPaths[resultIndex]; // found
     } else {
+        if (tree->capacity <= tree->size) return NULL;
         // make room for new
-        _move(tree, resultIndex);
+        if (resultIndex < tree->size)
+            _move(tree, resultIndex);
         // create a new path entry
         Path* newSegmentLoc = &tree->sortedPaths[resultIndex];
         memcpy(newSegmentLoc, segment, sizeof(*newSegmentLoc));
@@ -178,6 +184,12 @@ void removePathSegment(OdfTree * tree, const Path * segment) {
         _unmove(tree, resultIndex);
         tree->size--;
     }
+}
+
+// Returns the copied path in `destination` tree
+Path* copyPath(Path * source, OdfTree * destination) {
+    if (source->parent) copyPath(source->parent, destination);
+    return addPathSegment(destination, source);
 }
 
 

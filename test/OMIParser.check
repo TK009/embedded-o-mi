@@ -3,8 +3,14 @@
 #include "ParserUtils.h"
 #include "testUtils.h"
 
-char * expectedPath = "";
+//char * expectedPath = "";
+OdfTree odf;
+Path paths[OdfDepthLimit];
+Path* expectedPath;
 OdfParserEvent expectedEvent = {PE_Path, NULL};
+#define ExpectedPath(stringPath, nodetype) \
+  OdfTree_init(&odf, paths, OdfDepthLimit); \
+  expectedPath = addPath(&odf, stringPath, nodetype)
 
 static ErrorResponse pathEventCb(OmiParser *parser, Path *path, OdfParserEvent actualEvent) {
   ck_assert_int_eq(actualEvent.type, expectedEvent.type);
@@ -12,13 +18,12 @@ static ErrorResponse pathEventCb(OmiParser *parser, Path *path, OdfParserEvent a
     //ck_assert_ptr_ne(actualEvent.data, NULL);
     ck_assert_str_eq(actualEvent.data, expectedEvent.data);
   }
-  OdfTree odf;
-  OdfTree_init(&odf);
-  const Path* targetPath = addPath(&odf, expectedPath);
+  //const Path* targetPath = addPath(&odf, expectedPath, OdfInfoItem);
   if (path) {
-    ck_assert_uint_eq(PathGetDepth(targetPath), PathGetDepth(path));
-    //ck_assert_uint_eq(targetPath->parent->hashCode, path->parent->hashCode);
-    //ck_assert_mem_eq(targetPath->odfId, path->odfId, targetPath->odfIdLength);
+    ck_assert_uint_eq(PathGetDepth(expectedPath), PathGetDepth(path));
+    ck_assert_uint_eq(PathGetNodeType(expectedPath), PathGetNodeType(path));
+    //ck_assert_uint_eq(expectedPath->parent->hashCode, path->parent->hashCode);
+    ck_assert_mem_eq(expectedPath->odfId, path->odfId, expectedPath->odfIdLength);
     for (int i = 0; i < odf.size; ++i) {
       Path expected = odf.sortedPaths[i];
       Path actualPath = parser->pathStack[i];
@@ -137,7 +142,7 @@ static ErrorResponse noopPathCb(OmiParser *p, Path *a, OdfParserEvent b) {
     ck_assert_int_eq(p->parameters.format, OmiOdf);
 
     testState("<msg>\n ", OmiState_Msg);
-    expectedPath = "Objects";
+    ExpectedPath("Objects", OdfObject);
     testState("<Objects version=\"2.0\" xmlns=\"http://www.opengroup.org/xsd/odf/2.0/\">\n ", OdfState_Objects);
     testState(" <Object type=\"TypeOne\"> \n ", OdfState_Object);
     
@@ -145,28 +150,28 @@ static ErrorResponse noopPathCb(OmiParser *p, Path *a, OdfParserEvent b) {
     p->tempString[p->tempStringLength] = '\0';
     ck_assert_str_eq(p->tempString, "Object1");
 
-    expectedPath = "Objects/Object1";
+    ExpectedPath("Objects/Object1", OdfObject);
     testState("</id> \n", OdfState_ObjectInfoItems);
 
-    expectedPath = "Objects/Object1/description";
+    ExpectedPath("Objects/Object1/description", OdfDescription);
     expectedEvent = (OdfParserEvent){PE_Path, "Human readable description."};
     testState("<description>Human readable description.", OdfState_Description);
     testState("</description> \n", OdfState_ObjectInfoItems);
 
-    expectedPath = "Objects/Object1/Sensor1";
+    ExpectedPath("Objects/Object1/Sensor1", OdfInfoItem);
     expectedEvent = (OdfParserEvent){PE_Path, NULL};
     testState("<InfoItem name=\"Sensor1\" type=\"sometype\"> \n", OdfState_InfoItem);
     ck_assert(PathGetNodeType(p->currentOdfPath) == OdfInfoItem);
 
-    expectedPath = "Objects/Object1/Sensor1/description";
+    ExpectedPath("Objects/Object1/Sensor1/description", OdfDescription);
     expectedEvent = (OdfParserEvent){PE_Path, "Human readable description."};
     testState("<description>Human readable description.</description> \n", OdfState_InfoItem);
     
-    expectedPath = "Objects/Object1/Sensor1/MetaData";
+    ExpectedPath("Objects/Object1/Sensor1/MetaData", OdfMetaData);
     expectedEvent = (OdfParserEvent){PE_Path, NULL};
     testState("<MetaData> \n", OdfState_MetaData);
 
-    expectedPath = "Objects/Object1/Sensor1/MetaData/MetaData1";
+    ExpectedPath("Objects/Object1/Sensor1/MetaData/MetaData1", OdfInfoItem);
     testState("<InfoItem name=\"MetaData1\"> \n", OdfState_InfoItem);
 
     expectedEvent = (OdfParserEvent){PE_ValueDateTime, "2019-11-28T14:34:04.519+02:00"};
@@ -183,7 +188,7 @@ static ErrorResponse noopPathCb(OmiParser *p, Path *a, OdfParserEvent b) {
     testState("</MetaData> \n", OdfState_InfoItem);
     ck_assert_str_eq(p->currentOdfPath->odfId, "Sensor1");
 
-    expectedPath = "Objects/Object1/Sensor1";
+    ExpectedPath("Objects/Object1/Sensor1", OdfInfoItem);
     expectedEvent = (OdfParserEvent){PE_ValueUnixTime, "42"};
     testState("<value unixTime=\"42\">", OdfState_Value);
 
@@ -387,7 +392,8 @@ static ErrorResponse noopPathCb(OmiParser *p, Path *a, OdfParserEvent b) {
     ck_assert_int_eq(current->i, -1);
     testValue("<value type=\"xs:string\">str</value>", V_String);
     //ck_assert_str_eq(current->i, -1); freed already
-    testValue("<value type=\"xs:boolean\">true</value>", V_Boolean);
+    testValue("<value type=\"xs:boolean\">false</value>", V_Boolean);
+    testValue("<value type=\"xs:boolean\">garbage</value>", V_Boolean);
     ck_assert((bool)current->i);
     testValue("<value type=\"xs:unsignedInt\">1</value>", V_UInt);
     ck_assert_int_eq(current->i, 1);

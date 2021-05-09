@@ -204,6 +204,8 @@ Printf get(int i) {
     TestErrorCode(Err_OOM_String, 500, "Out of text memory");
     TestErrorCode(Err_OOM, 500, "Out of memory");
     TestErrorCode(Err_NotImplemented, 501, "Not implemented");
+    TestErrorCode(Err_ScriptParse, 400, "Script parsing error");
+    TestErrorCode(Err_ScriptRun, 500, "Script runtime error");
 
     OmiParser_destroy(&parser);
 

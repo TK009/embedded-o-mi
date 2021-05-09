@@ -5,6 +5,7 @@
 #include <stdio.h> // sscanf
 #include <time.h> // mktime, tm
 
+#include "OmiConstants.h"
 
 
 // FIXME: error handling
@@ -46,4 +47,25 @@ eomi_time parseDateTime(const char * dateStr) {
     datetime.tm_sec = (int)s;    // 0-61 (0-60 in C++11)
     // FIXME: also does localtime (timezone) conversion, which needst to be corrected
     return mktime(&datetime);
+}
+
+inline bool parseBoolean(strhash hash) {
+    switch (hash) {
+        case h_1:
+        case h_true:
+        case h_True:
+        case h_TRUE:
+        case h_on:
+        case h_ON:
+            return true;
+        case h_0:
+        case h_false:
+        case h_False:
+        case h_FALSE:
+        case h_off:
+        case h_OFF:
+            return false;
+        default:
+            return true;
+    }
 }

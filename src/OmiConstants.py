@@ -126,6 +126,24 @@ enum("OdfTypeHash"
     , xsStringData("unsignedLong")
     , xsStringData("unsignedByte")
     )
+enum("KeywordHash"
+    , StringData("onwrite")
+    )
+
+enum("BooleanHash"
+    , StringData("true")
+    , StringData("True")
+    , StringData("TRUE")
+    , StringData("on")
+    , StringData("ON")
+    , StringData("false")
+    , StringData("False")
+    , StringData("FALSE")
+    , StringData("off")
+    , StringData("OFF")
+    , StringData("1")
+    , StringData("0")
+    )
 
 for s in allStrings:
     hprint("extern ", end='')

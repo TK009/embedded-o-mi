@@ -2,7 +2,7 @@
 
 import http.server, cgi, sys, os, subprocess
 
-core = subprocess.Popen(["./core"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+core = subprocess.Popen(["./bin/core"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
 
 class CallbackHandler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):

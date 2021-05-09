@@ -598,6 +598,10 @@ static inline int processValue(OmiParser *p, yxml_ret_t r){
                     p->currentOdfPath->value.d = parseDouble(p->tempString);
                     data = NULL;
                     break;
+                case V_Boolean:
+                    p->currentOdfPath->value.b = parseBoolean(p->stHash.hash);
+                    data = NULL;
+                    break;
                 case V_String:
                     storeTempStringOrError(data);
                     p->currentOdfPath->flags |= PF_ValueMalloc;

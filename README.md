@@ -47,7 +47,7 @@ Features
 * Subscription cancel/end is ~O(n), but could be accelerated easily
 
 ### Speed
-With small O-DF trees it is fast.
+TODO: measure
 
 ### Memory usage
 Increases only when new unseen strings are written to the O-DF tree. Everything else has predefined static memory storage.
@@ -55,8 +55,20 @@ Increases only when new unseen strings are written to the O-DF tree. Everything 
 TODO
 ------
 
+Backlog of features that could be implemented are listed in this section.
+
+Undecided features (should be implemented or not?):
+* InfoItem write handlers; ability to replace write values before subscription trigger and save
+
 Sorted by about highest to lowest priority:
 
-* Flash storage
+* Fix script write self path causing incorrect subscription notifications when subscribing after script addition
+   - first result is the raw value and second is value modified and written by the script
+   - options include maintaining write handler order with scripts having higher priority or in separate item/list
+* Script API: read infoitems
+* Object(s) level subscriptions that expand when new children are added 
+* Flash storage for latest values
+* Script API: subscription handler scripts to transform incompatible formats
 * Value history (maybe with poll subscriptions only)
 * Parser named xmlns attributes
+* Creation subscriptions; interval=-2

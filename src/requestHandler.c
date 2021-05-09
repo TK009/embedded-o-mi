@@ -3,10 +3,16 @@
 #include "ParserUtils.h"
 #include "MemoryPool.h"
 #include <string.h>
+#include "OmiConstants.h"
+#include "ScriptEngine.h"
 
+Path pathsStorage[ODFTREE_SIZE];
 OdfTree tree;
 CreateStaticMemoryPool(LatestValue, LatestValues, ODFTREE_BLOCKS)
 
+void RequestHandler_init() {
+    OdfTree_init(&tree, pathsStorage, ODFTREE_SIZE);
+}
 
 struct RequestHandler {
     ResponseCallback respond;
@@ -55,6 +61,34 @@ HandlerInfo** getHandlerInfoPtr(Path * path) {
     return NULL;
 }
 
+ErrorResponse handleScript(OmiParser *p, Path *path, OdfParserEvent event) {
+    (void) event;
+    // path is InfoItem
+    if (PathGetNodeType(path) != OdfInfoItem) return Err_OK;
+    HandlerInfo* handlerInfo = path->value.latest->writeHandler;
+
+    // Not needed because write and read handlers are stored separately so they shouldn't mix
+    //if (!handlerInfo || p->parameters.requestType != handlerInfo->callbackInfo.requestType)
+    //    return Err_OK; // InternalError?
+
+    // find correct MetaData from children
+    // FIXME assumes low number of metadata infoitems; maybe use better search algo instead
+    Path * scriptInfoItem = NULL;
+    Path * end = tree.size + (Path *)&tree.sortedPaths[0];
+    for (Path *child = path+1; child->depth > path->depth && child < end; ++child) {
+        if (child->idHashCode == h_onwrite) { // TODO: check for read and call requests
+            scriptInfoItem = child;
+            if (scriptInfoItem->value.latest && scriptInfoItem->value.latest->current.value.str) {
+                HString script;
+                HString_init(&script, scriptInfoItem->value.latest->current.value.str);
+                return ScriptEngine_run(p, path, &script);
+            }
+            break;
+        }
+    }
+    return Err_OK; // Internal error ?
+}
+
 ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
     Path* storedPathSegment = NULL;
     int resultIndex;
@@ -64,13 +98,15 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
             if (!path->parent) return Err_OK; // Objects
             storedPathSegment = addPathSegment(&tree, path);
             if (!storedPathSegment) return Err_OOM;
-            storedPathSegment->odfId = storeString(path->odfId);
-            storedPathSegment->flags |= PF_OdfIdMalloc;
-            if (storedPathSegment->odfId == NULL) {
-                removePathSegment(&tree, path);
-                return Err_OOM_String;
-            }
             if (storedPathSegment->parent == path->parent) { // new was created (does not have internal parent yet)
+                // store id
+                HString odfId = {.value=path->odfId, .hash=path->idHashCode, .length=path->odfIdLength};
+                storedPathSegment->odfId = storeHString(&odfId);
+                storedPathSegment->flags |= PF_OdfIdMalloc;
+                if (storedPathSegment->odfId == NULL) {
+                    removePathSegment(&tree, path);
+                    return Err_OOM_String;
+                }
                 // find parent
                 if (odfBinarySearch(&tree, path->parent, &resultIndex)) {
                     storedPathSegment->parent = &tree.sortedPaths[resultIndex];
@@ -92,7 +128,7 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                         freeString(tmpStr);
                         return Err_OOM;
                     }
-                    storedPathSegment->flags |= PF_ValueMalloc;
+                    storedPathSegment->flags |= PF_ValueMalloc | PF_IsNewWithoutValue;
                     // TODO: add subscriptions to Object(s) elsewhere,
                     // if parent has subscriptions, copy them to child to keep subtree logic
                     HandlerInfo ** h = getHandlerInfoPtr(storedPathSegment->parent);
@@ -144,35 +180,94 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                 storedPathSegment = &tree.sortedPaths[resultIndex];
 
                 LatestValue * latest = storedPathSegment->value.latest;
-                // update flags, retaining old, and reset type just in case, TODO: handle type change if history is implemented
-                storedPathSegment->flags = (storedPathSegment->flags & ~PF_ValueType) | path->flags;
+
+                bool wasAllocatedString =
+                    (storedPathSegment->flags & (PF_ValueType | PF_ValueMalloc)) == (V_String | PF_ValueMalloc);
 
                 bool changed = false, updated = false;
+
                 // store value
                 if (event.data) { // String type value
                     latest->upcoming.value.str = event.data; // NOTE: free not needed
-                    if (latest->current.value.str == NULL ||
-                            strcmp(latest->upcoming.value.str, latest->current.value.str) != 0) {
+                    if (!wasAllocatedString ||
+                            (latest->current.value.str &&
+                            strcmp(latest->upcoming.value.str, latest->current.value.str) != 0)) {
                         changed = true;
                     }
                 } else {
                     latest->upcoming.value = path->value;
+                    if (latest->upcoming.value.l != latest->current.value.l)
+                        changed = true;
                 }
                 // check for missing timestamp
                 if (!latest->upcoming.timestamp)
                     latest->upcoming.timestamp = getTimestamp();
 
                 // events:
-                if (latest->current.timestamp < latest->upcoming.timestamp) updated = true;
+                if (latest->current.timestamp < latest->upcoming.timestamp) {
+                    updated = true;
+                }
+
+                if (changed || updated) { // FIXME: why are both needed?
+                    // add internal script subscription:
+                    if (path->idHashCode == h_onwrite && path->parent->idHashCode == h_MetaData && event.data) {
+                        // NOTE: allocated string re-used, FIXME: use HString as event data
+                        HString script = {.value = event.data, .length = p->tempStringLength, .hash = p->stHash.hash};
+                        // Check that code can be parsed
+                        ErrorResponse parseResult = ScriptEngine_testParse(&script);
+                        if (parseResult) {
+                            p->stringAllocator->free(event.data);
+                            return parseResult;
+                        }
+                        // create internal subscription if this is the first write
+                        if (storedPathSegment->flags & PF_IsNewWithoutValue) {
+
+
+                            Path * subscriptionTarget = storedPathSegment->parent->parent;
+                            HandlerInfo* subInfo = NULL;
+
+                            // Check existing // REPLACED WITH PF_IsNewWithoutValue FLAG
+                            //HandlerInfo* handler = NULL;
+                            //// TODO LatestValue structure needed for Object subscriptions
+                            //
+                            //if (subscriptionTarget->value.latest)
+                            //    handler = storedPathSegment->parent->parent->value.latest->writeHandler;
+                            //for (; handler; handler = handler->nextOther) {
+                            //    if (handler->callbackInfo.connectionId == -2) {// script marker TODO: enum
+                            //        subInfo = handler;
+                            //        break;
+                            //    }
+                            //}
+                            if (!subInfo) subInfo = (HandlerInfo*) poolAlloc(&HandlerInfoPool);
+                            if (!subInfo) return Err_OOM;
+                            *subInfo = (HandlerInfo){
+                                .handlerType = HT_Script, 
+                                .callbackInfo = p->parameters, 
+                                .handler = handleScript,
+                                .another = NULL,
+                                .nextOther = NULL,
+                                .prevOther = NULL,
+                                //.parentPath = storedPathSegment->parent->parent,
+                            };
+                            subInfo->callbackInfo.connectionId = -2; // script write responses should not go anywhere
+                            addSubscription(NULL, subscriptionTarget, &subInfo);
+                        }
+                    }
+                    //storedPathSegment->flags &= ~PF_IsNewWithoutValue;
+                    // update flags, retaining old, and reset type just in case, TODO: handle type change if history is implemented
+                    storedPathSegment->flags = (storedPathSegment->flags & ~PF_ValueType & ~PF_IsNewWithoutValue) | path->flags;
+                }
                 //if (((storedPathSegment->flags & PF_ValueType) != V_String)
                 //        && (latest->current.value.l != latest->upcoming.value.l)) changed = true;
 
                 // free old
-                if ((storedPathSegment->flags & PF_ValueType) == V_String)
+                if (wasAllocatedString)
                     p->stringAllocator->free(latest->current.value.str);
 
                 // FIXME: optimize event responses (do not read the already found path)
+                // update
                 latest->current = latest->upcoming;
+                latest->upcoming = (SingleValue) {0, 0, {.l = 0}};
                 // Trigger events here
                 if (updated)
                     for (HandlerInfo * handler = latest->writeHandler; handler; handler = handler->nextOther) {
@@ -190,25 +285,32 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                             // TODO: Open/find connection here
                             // connectionId = requestHandler.connectionFor(p->parameters.callbackAddr);
                             // cancel sub if not successful
-                            connectionHandler.connections[p->parameters.connectionId].responsibleHandler = handler;
-                            for (Path * pathToOpen = p->pathStack; pathToOpen < p->currentOdfPath; ++pathToOpen){
-                                handler->handler(p, pathToOpen, readEvent);
-                                // FIXME: error reporting?
+                            // handleCancel()
+
+                            if (p->parameters.connectionId >= 0){ // skip on internal callbacks
+                                connectionHandler.connections[p->parameters.connectionId].responsibleHandler = handler;
+                                p->callbackOpenFlag |= 1 << p->parameters.connectionId;
                             }
-                            p->callbackOpenFlag |= 1 << p->parameters.connectionId;
+
+                            for (Path * pathToOpen = p->pathStack; pathToOpen < p->currentOdfPath; ++pathToOpen){
+                                ErrorResponse res = handler->handler(p, pathToOpen, readEvent);
+                                // error reporting?
+                                if (res) {
+                                    p->parameters = requestParams;
+                                    return res;
+                                }
+                            }
                         }
                         // Run handler for the rest
-                        handler->handler(p, storedPathSegment, readEvent);
+                        ErrorResponse res = handler->handler(p, storedPathSegment, readEvent);
                         // 
                         handler->callbackInfo = p->parameters;
                         p->parameters = requestParams;
+                        if (res) {
+                            p->parameters = requestParams;
+                            return res;
+                        }
                     }
-
-                // update
-                // TODO: change of value type not allowed atm.
-                // FIXME: optimize event responses and move update back to here:
-                //latest->current = latest->upcoming;
-                latest->upcoming = (SingleValue) {0, 0, {.l = 0}};
 
                 return Err_OK;
             }
@@ -219,7 +321,6 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
             if (event.data) p->stringAllocator->free(event.data);
             return Err_InvalidElement; // actually invalid
         case PE_RequestEnd:
-            // TODO
             // Subs 3. close nodes, requests (and connections, if started from here)
             //  use subtree to close
             while (p->callbackOpenFlag) {
@@ -311,6 +412,7 @@ ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event) {
         open = addSubscription; // NOTE: only used for subtree function, in order to only save the sub to request leafs and their children
         close = noopCb;
         subInfo = (HandlerInfo*) poolAlloc(&HandlerInfoPool);
+        if (!subInfo) return Err_OOM;
         *subInfo = (HandlerInfo){
             .handlerType = HT_Subscription, 
             .callbackInfo = p->parameters, 
@@ -318,7 +420,7 @@ ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event) {
             .another = NULL,
             .nextOther = NULL,
             .prevOther = NULL,
-            .parentPath = path,
+            //.parentPath = NULL,
         };
         subInfo->callbackInfo.requestType = OmiRead;
         subInfo->callbackInfo.lastPath = NULL;

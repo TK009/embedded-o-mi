@@ -2,6 +2,7 @@
 #include "OMIParser.h"
 #include "requestHandler.h"
 #include "StringStorage.h"
+#include "ScriptEngine.h"
 
 Printf getOutput(int c) {
     (void) c;
@@ -11,8 +12,10 @@ Printf getOutput(int c) {
 int main(int argc, char ** argv) {
     (void) argc, (void) argv;
 
-    OdfTree_init(&tree);
+    RequestHandler_init();
     StringStorage_init();
+    int r = ScriptEngine_init();
+    if (r != 0) return r;
     connectionHandler.getPrintfForConnection = getOutput;
 
     OmiParser * parser = getParser(0);
@@ -28,6 +31,8 @@ int main(int argc, char ** argv) {
             default:
                 responseFromErrorCode(parser, result);
                 // return result;
+                OmiParser_destroy(parser);
+                OmiParser_init(parser, 0);
             case Err_End:
                 printf("\r\n"); // Separator: Easier to pipe the result to other programs
                 fflush(stdout);
