@@ -3,6 +3,7 @@
 #include "requestHandler.h"
 #include "StringStorage.h"
 #include "testUtils.h"
+#include "MemoryPool.h"
 
 char actualResponse[2048]; // max response size for tests
 char * bufferLocation = actualResponse;
@@ -39,6 +40,8 @@ Printf get(int i) {
   ResetCallback()
 
 ErrorResponse handleScript(OmiParser *p, Path *path, OdfParserEvent event);
+extern MemoryPool HandlerInfoPool;
+jerry_value_t jerry_value_from_infoitem(Path * path);
 
 #suite ScriptEngine
 
@@ -298,8 +301,38 @@ ErrorResponse handleScript(OmiParser *p, Path *path, OdfParserEvent event);
     "</Objects></msg></write></omiEnvelope>"), Err_ScriptParse);
   OmiParser_destroy(p);
 
-  OmiParser_init(p, 0);
 
+  // Exotic error cases
+  // invalid onwrite
+  path = addPath(&tree, "Objects/MyObject/MyItem", OdfInfoItem);
+  Path meta;
+  Path_init(&meta, PathGetDepth(path)+1, OdfMetaData, path, "MetaData", 0);
+  Path item;
+  Path_init(&item, PathGetDepth(&meta)+1, OdfInfoItem, &meta, "onwrite", 0);
+  addPathSegment(&tree, &item);
+  ck_assert_int_eq(PathGetNodeType(path), OdfInfoItem);
+  ck_assert_int_eq(handleScript(p, path, OdfParserEvent(PE_Path, NULL)), Err_OK);
+
+  HandlerInfoPool.freeCount = 0;
+  OmiParser_init(p, 0);
+  ck_assert_int_eq(runParser(p, 
+    "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
+    "<write msgformat=\"odf\">"
+    "<msg><Objects xmlns=\"odf.xsd\">"
+    "<Object><id>MyObject</id>"
+      "<InfoItem name=\"ScriptTest\">"
+        "<MetaData><InfoItem name=\"onwrite\"><value unixTime=\"18\">"
+          "odf.writeItem();"
+        "</value></InfoItem></MetaData>"
+        "<value unixTime=\"30\" type=\"xs:int\">2</value>"
+      "</InfoItem>"
+    "</Object>"
+    "</Objects></msg></write></omiEnvelope>"), Err_ScriptRun);
+  OmiParser_destroy(p);
+
+  // OOM
+  HandlerInfoPool.freeCount = 0;
+  OmiParser_init(p, 0);
   ck_assert_int_eq(runParser(p, 
     "<omiEnvelope xmlns=\"omi.xsd\" ttl=\"10\">"
     "<write msgformat=\"odf\">"
@@ -307,13 +340,18 @@ ErrorResponse handleScript(OmiParser *p, Path *path, OdfParserEvent event);
     "<Object><id>MyObject</id>"
       "<InfoItem name=\"Overflow\">"
         "<MetaData><InfoItem name=\"onwrite\"><value unixTime=\"10\">"
-            "'Hello World'"
+          "odf.writeItem(event.value + 100);"
         "</value></InfoItem></MetaData>"
         "<value unixTime=\"22\" type=\"xs:int\">2</value>"
       "</InfoItem>"
     "</Object>"
-    "</Objects></msg></write></omiEnvelope>"), Err_ScriptParse);
+    "</Objects></msg></write></omiEnvelope>"), Err_OOM);
   OmiParser_destroy(p);
+
+  path->flags |= V_ODF;
+  jerry_value_t ret = jerry_value_from_infoitem(path);
+  ck_assert(jerry_value_is_null(ret));
+  jerry_release_value(ret);
 
   mark_point();
   ScriptEngine_destroy();

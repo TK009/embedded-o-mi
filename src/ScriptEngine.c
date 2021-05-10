@@ -141,7 +141,7 @@ jerry_value_t jerry_value_from_infoitem(Path * path){
 
     //bool isNumber = false;
     //double number;
-    switch (path->flags & PF_ValueType) {
+    switch ((ValueType) path->flags & PF_ValueType) {
         case V_Int:
         case V_Byte:
         case V_Short:
@@ -161,8 +161,8 @@ jerry_value_t jerry_value_from_infoitem(Path * path){
         case V_Boolean:
             return jerry_create_boolean(path->value.latest->current.value.b);
         // not possible atm
-        //default:
-        //    return jerry_create_null();
+        default:
+            return jerry_create_null();
     }
 }
 
@@ -311,8 +311,8 @@ int ScriptEngine_init() {
     jerry_release_value(parent);
 
     
-    Path * currentScriptCallbackPath = NULL;
-    OmiParser * currentParser = NULL;
+    currentScriptCallbackPath = NULL;
+    currentParser = NULL;
 
     return errors;
 }

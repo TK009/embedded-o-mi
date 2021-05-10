@@ -7,7 +7,7 @@ CreateStaticMemoryPool(HString, stringWrappers, StringStorageMaxStringBlocks)
 Skiplist stringStorage;
 
 Allocator stringStorageFreecator = (Allocator){
-    .free = freeString
+    .free = (FreeF) freeString
 };
 
 void StringStorage_init() {

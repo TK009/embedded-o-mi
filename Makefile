@@ -6,6 +6,8 @@ SANITIZER ?= address
 ifeq ($(SANITIZER),address)
 SANITIZER_OPT = -fsanitize=address -fsanitize-address-use-after-scope -fsanitize=undefined
 CHECKLIB=`pkg-config --libs check`
+COVERAGE = -fprofile-instr-generate -fcoverage-mapping -fno-omit-frame-pointer 
+
 else ifeq ($(SANITIZER),memory)
 SANITIZER_OPT = -fsanitize=memory -fno-optimize-sibling-calls -fsanitize-memory-track-origins=2 -fsanitize-blacklist=sanignore.txt #-fsanitize-ignorelist=sanignore.txt
 # check has a problem with memory san (fwrite in ppack), needs to be compiled with the ignore list:
@@ -20,8 +22,10 @@ SANITIZER_OPT = -fsanitize=memory -fno-optimize-sibling-calls -fsanitize-memory-
 # ./configure CC=clang CFLAGS=$(SANITIZER_OPT)
 # make -j
 CHECKLIB=$(shell find ./check/src/.libs/ -name '*.o') #./check/src/.libs/libcheck.so
+# extra errors in lprofWriteData fileWriter
+COVERAGE =
 endif
-COVERAGE = -fprofile-instr-generate -fcoverage-mapping -fno-omit-frame-pointer 
+
 TESTFLAGS = `pkg-config --cflags check` $(COVERAGE) $(SANITIZER_OPT)
 DEBUGFLAGS ?= $(TESTFLAGS) -g -Wall -Wextra -Wno-gnu-statement-expression -pedantic -Wno-empty-translation-unit -Wno-gnu-folding-constant
 ASAN_OPTIONS=strict_string_checks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1
@@ -107,9 +111,9 @@ $(OBJDIR)/%.check.c: $(TESTDIR)/%.check | $(OBJDIR)
 	checkmk $< > $@
 
 $(OBJDIR)/%.c: $(SRCDIR)/%.py
-	./$< c > $@
+	python3 $< c > $@
 $(OBJDIR)/%.h: $(SRCDIR)/%.py
-	./$< h > $@
+	python3 $< h > $@
 
 # fix clean compile by providing some deps manually:
 $(OBJS): $(OBJDIR)/OmiConstants.h
@@ -152,14 +156,12 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c $(DEPDIR)/%.d | $(OBJDIR)
 #TODO: How to get dependencies for tests?
 #$(OBJDIR)/%.test: $(OBJDIR)/%.check.o $(OBJDIR)/%.o $(LIBS)
 $(OBJDIR)/%.test: $(OBJDIR)/%.check.o $(OBJS) $(LIBS)
-	@echo
-	@echo "LINKING $@!"
+	@echo "LINK $@"
 	$(CC) -o $@ $(DEBUGFLAGS) $(OBJS) $< $(LDTESTFLAGS)
 #@echo "LINKING $@ complete!"
 # save .map: -Xlinker -Map=% 
 
 $(BINDIR)/core: $(OBJDIR)/main.o $(OBJS) $(LIBS)
-	@echo
 	@echo "LINKING $@!"
 	$(CC) -o $@ $(DEBUGFLAGS) $(OBJS) $< $(LDTESTFLAGS)
 
@@ -197,6 +199,7 @@ COVERAGE_FILTER ?= egrep --color=never '(\[0;41m|       \^0|\|      0\|)' -C 3 
 #COVERAGE_FILTER ?= awk -v ctx=3 -v lastf='' '{a[++i]=$$0 "\n";} /^\[0;/ {if (lastf!=$$0){lastf=$$0;f=1;}} /(\[0;41m|       \^0|\|      0\|)/{ if (NR-lastj>ctx){for (j=0;j<95;++j) printf "┅"; print "";if (f){print lastf "[0m";f=0;}} for(j=NR-ctx;j<NR+ctx;j++){printf a[j];a[j]="";lastj=j;}}'
 #COVERAGE_FILTER ?= awk -v ctx=3 -v lastf='' '{a[++i]=$$0 "\n";} /^\[0;/ {if (lastf!=$$0){lastf=$$0;f=1;}} /(\[0;41m| {7}\^0|\| {6}0\|)/{ if (NR-lastj>ctx){for (j=0;j<95;++j) printf "┅"; print "";if (f){print lastf "[0m";f=0;}} for(j=NR-ctx;j<NR+ctx;j++){printf a[j];a[j]="";lastj=j;}}'
 
+tests: $(TESTBINARIES)
 test: $(TESTRESULTS) tags
 	@echo
 	@llvm-profdata merge -sparse $(TESTDATA) -o $(OBJDIR)/default.profdata
@@ -233,7 +236,7 @@ info:
 $(NATIVEJS): $(LIBDIR)
 	@echo
 	@echo MAKE JERRY SCRIPT
-	@cd jerryscript; python tools/build.py --clean --debug --lto=OFF --strip=OFF --profile minimal --jerry-cmdline=OFF --external-context=ON
+	@cd jerryscript; python3 tools/build.py --clean --debug --lto=OFF --strip=OFF --profile minimal --jerry-cmdline=OFF --external-context=ON
 	@cp jerryscript/build/lib/* $(LIBDIR)/
 # parallel build fix (the first depends on the second)
 $(word 1,$(NATIVEJS)): $(word 2,$(NATIVEJS))
@@ -244,7 +247,7 @@ $(word 2,$(NATIVEJS)): $(word 3,$(NATIVEJS))
 #	@echo
 #	@echo MAKE JERRY SCRIPT
 #	@cd jerryscript
-#	@python tools/build.py --builddir=$(pwd)/build/esp32s2 --toolchain=../jerryscript-toolchain-esp32.cmake --cmake-param "-GUnix Makefiles" --jerry-cmdline=OFF --jerry-port-default=OFF --lto=OFF --strip=OFF --external-context=ON
+#	@python3 tools/build.py --builddir=$(pwd)/build/esp32s2 --toolchain=../jerryscript-toolchain-esp32.cmake --cmake-param "-GUnix Makefiles" --jerry-cmdline=OFF --jerry-port-default=OFF --lto=OFF --strip=OFF --external-context=ON
 ## parallel build fix (the first depends on the second)
 #$(word 1,$(ESP32S2JS)): $(word 2,$(ESP32S2JS))
 

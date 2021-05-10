@@ -101,7 +101,7 @@ void _move(OdfTree* tree, int index) {
 
     Path * indexPointer = tree->sortedPaths + index;
 
-    for (int i = tree->size + 1; i > index; --i) {
+    for (int i = tree->size; i > index; --i) {
         Path * moving = tree->sortedPaths+i-1;
         if (moving->parent >= indexPointer)
             moving->parent++;
@@ -140,15 +140,25 @@ Path* addPath(OdfTree* tree, const char pathString[], NodeType lastNodeType) {
                 // calc hash and collect variables for searching
                 strhash idHash = calcHashCodeL(idStart, segmentLength);
                 strhash parentHash = parent? parent->hashCode : 0;
-                Path newSegment = {
-                    .depth = OdfDepth(depth, *current ? OdfObject : lastNodeType),
-                    .odfIdLength = (uchar) segmentLength,
-                    .odfId = idStart,
-                    .parent = parent,
-                    .idHashCode = idHash,
-                    .hashCode = idHash ^ parentHash,
-                    .flags = 0
-                };
+                Path newSegment = {0};
+                //Path newSegment = (Path){
+                //    .depth = OdfDepth(depth, *current ? OdfObject : lastNodeType),
+                //    .odfIdLength = (uchar) segmentLength,
+                //    .odfId = idStart,
+                //    .parent = parent,
+                //    .idHashCode = idHash,
+                //    .hashCode = idHash ^ parentHash,
+                //    .flags = 0,
+                //    .value.d = 0
+                //};
+                newSegment.depth = OdfDepth(depth, *current ? OdfObject : lastNodeType);
+                newSegment.odfIdLength = (uchar) segmentLength;
+                newSegment.odfId = idStart;
+                newSegment.parent = parent;
+                newSegment.idHashCode = idHash;
+                newSegment.hashCode = idHash ^ parentHash;
+                //newSegment.flags = 0;
+                //newSegment.value.l = 0L;
 
                 parent = addPathSegment(tree, &newSegment);
                 if (!parent) return NULL;
@@ -171,7 +181,8 @@ Path* addPathSegment(OdfTree * tree, Path * segment) {
             _move(tree, resultIndex);
         // create a new path entry
         Path* newSegmentLoc = &tree->sortedPaths[resultIndex];
-        memcpy(newSegmentLoc, segment, sizeof(*newSegmentLoc));
+        //memcpy(newSegmentLoc, segment, sizeof(*newSegmentLoc));
+        *newSegmentLoc = *segment;
         tree->size++;
         return newSegmentLoc;
     }

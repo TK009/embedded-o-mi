@@ -65,9 +65,9 @@ ErrorResponse handleScript(OmiParser *p, Path *path, OdfParserEvent event) {
     (void) event;
     // path is InfoItem
     if (PathGetNodeType(path) != OdfInfoItem) return Err_OK;
-    HandlerInfo* handlerInfo = path->value.latest->writeHandler;
 
     // Not needed because write and read handlers are stored separately so they shouldn't mix
+    //HandlerInfo* handlerInfo = path->value.latest->writeHandler;
     //if (!handlerInfo || p->parameters.requestType != handlerInfo->callbackInfo.requestType)
     //    return Err_OK; // InternalError?
 

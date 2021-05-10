@@ -45,16 +45,11 @@ Printf get(int i) {
   ResetCallback()
 
 extern Allocator stringStorageEntriesAllocator;
-//extern MemoryPool stringStorageEntries;
-//extern MemoryPool stringStorageMetadatas;
-//extern MemoryPool stringWrappers;
-//extern MemoryPool stringStorageEntriesData;
-//extern MemoryPool stringStorageMetadatasData;
-//extern MemoryPool stringWrappersData;
-//extern MemoryPool stringStorageEntriesFree;
-//extern MemoryPool stringStorageMetadatasFree;
-//extern MemoryPool stringWrappersFree;
 
+int erronousHandler(OmiParser* p, Path * path, OdfParserEvent e) {
+  (void) p, (void) path, (void) e;
+  return Err_InternalError;
+}
 
 #suite requestHandler
 
@@ -513,6 +508,14 @@ extern Allocator stringStorageEntriesAllocator;
     reqId[0] = (char)(subInfo - (HandlerInfo *) HandlerInfoPool.data);
     ck_assert_int_eq(handleCancel(p, NULL, OdfParserEvent(PE_RequestID, reqId)), Err_OK);
 
+    subInfo2->callbackInfo.lastPath = NULL;
+    OmiParser_pushPath(p, "MyObject", OdfObject);
+    OmiParser_pushPath(p, "MyItem", OdfInfoItem);
+    subInfo2->handler = erronousHandler;
+    path->value.latest->writeHandler = subInfo2;
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_Path, NULL)), Err_OK);
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueUnixTime, stra("9999"))), Err_OK);
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueData, stra("5"))), Err_InternalError);
 
     OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
     OmiParser_destroy(p);
@@ -562,6 +565,13 @@ extern Allocator stringStorageEntriesAllocator;
       "</Objects></msg></result></response></omiEnvelope>"
     );
 
+    // OOM
+    HandlerInfoPool.freeCount = 0;
+    p->parameters.requestType = OmiSubscribe;
+    p->parameters.interval = -1;
+    ck_assert_int_eq(handleRead(p, path, OdfParserEvent(PE_Path, NULL)), Err_OOM);
+
+    
 
     OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
     OmiParser_destroy(p);
