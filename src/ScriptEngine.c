@@ -4,7 +4,6 @@
 #include "OMIParser.h" // Error codes
 #include "requestHandler.h" // Error codes
 #include "OmiConstants.h"
-
 #include "jerryscript-port.h"
 
 Allocator ScriptEngineAllocator = StdAllocator;

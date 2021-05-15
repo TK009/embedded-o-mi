@@ -4,6 +4,10 @@
 #include "utils.h"
 #include "OdfTree.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum OmiVersion {
     OmiV_unknown,
     OmiV1,      // without xmlns
@@ -47,4 +51,8 @@ typedef struct OmiRequestParameters {
 
 //#define OmiRequestParameters_INITIALIZER {.requestType=OmiInvalid, .arrival=}
 
+
+#ifdef __cplusplus
+}
+#endif
 #endif

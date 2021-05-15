@@ -8,6 +8,10 @@
 
 #include <string.h> //memset
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef ParserPoolSize
 #define ParserPoolSize 2
 #endif
@@ -177,4 +181,8 @@ struct LatestValue {
     //OdfPathCallback readHandler;
 };
 
+
+#ifdef __cplusplus
+}
+#endif
 #endif

@@ -111,9 +111,9 @@ $(LIBDIR):
 $(OBJDIR)/%.check.c: $(TESTDIR)/%.check | $(OBJDIR)
 	checkmk $< > $@
 
-$(OBJDIR)/%.c: $(SRCDIR)/%.py
+$(OBJDIR)/%.c: $(SRCDIR)/%.py $(OBJDIR)
 	$(PY3) $< c > $@
-$(OBJDIR)/%.h: $(SRCDIR)/%.py
+$(OBJDIR)/%.h: $(SRCDIR)/%.py $(OBJDIR)
 	$(PY3) $< h > $@
 
 # fix clean compile by providing some deps manually:
@@ -176,10 +176,10 @@ $(BINDIR)/core: $(OBJDIR)/main.o $(OBJS) $(LIBS)
 .PHONEY: clean debug test coverageclean coverage coverage-html
 clean:
 	$(rm) -rf $(OBJDIR)
-	$(rm) default.profraw
+	#$(rm) default.profraw
 	$(rm) -rf $(LIBDIR)
 	$(rm) -rf jerryscript/build
-	for p in platforms/*; do cd $(p) && make clean
+	for p in platforms/*; do cd $$p && make clean; done
 	@echo "Cleanup complete!"
 
 SHELL=/bin/bash -o pipefail

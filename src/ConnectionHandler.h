@@ -5,6 +5,10 @@
 #include "OdfTree.h"
 #include "OMIParser.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef NumConnections
 #define NumConnections 10
 #endif
@@ -39,4 +43,8 @@ void responseEndWithObjects(const OmiRequestParameters * p);
 void responseFromErrorCode(OmiParser* parser, ErrorResponse err);
 void responseEndWithFailure(const OmiRequestParameters * p, int returnCode, const char * description);
 
+
+#ifdef __cplusplus
+}
+#endif
 #endif

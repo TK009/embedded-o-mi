@@ -4,6 +4,10 @@
 #include "Settings.h"
 #include "utils.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef const char * OdfId;
 typedef uint PathFlags;
 
@@ -125,4 +129,8 @@ typedef enum PathFlag {
     //PF_isExternalReadOnly    = 1 <<  // Script can write
 } PathFlag;
 
+
+#ifdef __cplusplus
+}
+#endif
 #endif

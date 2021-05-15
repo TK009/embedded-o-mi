@@ -49,6 +49,10 @@ cprint = print if sys.argv[1] == "c" else noprint
 
 hprint("#ifndef OMICONSTANTS_H")
 hprint("#define OMICONSTANTS_H")
+hprint("#ifdef __cplusplus")
+hprint('extern "C" {')
+hprint("#endif")
+
 cprint('#include "OmiConstants.h"')
 print()
 
@@ -152,4 +156,8 @@ for s in allStrings:
     print(';')
 
 print()
+
+hprint("#ifdef __cplusplus")
+hprint("}")
+hprint("#endif")
 hprint("#endif")

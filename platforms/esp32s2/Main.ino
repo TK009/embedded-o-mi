@@ -1,9 +1,15 @@
 
 #include <Arduino.h>
+
+extern "C" {
+
 #include "OMIParser.h"
 #include "requestHandler.h"
 #include "StringStorage.h"
 #include "ScriptEngine.h"
+
+}
+
 
 void setup() {
     RequestHandler_init();

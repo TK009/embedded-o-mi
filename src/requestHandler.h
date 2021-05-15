@@ -7,6 +7,10 @@
 #include "MemoryPool.h"
 #include "ConnectionHandler.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // NOTE: Remember to OdfTree_init !
 extern OdfTree tree;
 extern Allocator LatestValuesAllocator;
@@ -23,4 +27,7 @@ ErrorResponse handleCancel(OmiParser * p, Path *path, OdfParserEvent event);
 typedef void (*ResponseCallback)(int, const char *);
 
 
+#ifdef __cplusplus
+}
+#endif
 #endif

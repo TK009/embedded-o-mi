@@ -5,6 +5,10 @@
 #include "MemoryPool.h"
 //#include "Settings.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // block = 32 units
 #ifndef StringStorageMaxStringBlocks
 #define StringStorageMaxStringBlocks 10
@@ -44,4 +48,8 @@ eomi_bool stringExists(const char *str);
 
 extern Allocator stringStorageFreecator;
 
+
+#ifdef __cplusplus
+}
+#endif
 #endif

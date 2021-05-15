@@ -4,6 +4,9 @@
 #include <string.h> //memset
 #include "utils.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct MemoryPool {
   ushort currentBlock; /* start here for searching a free slot, progress forward and loop back to start */
@@ -51,4 +54,8 @@ void poolFree_(MemoryPool *pool, void** element);
 
 eomi_bool poolExists(MemoryPool *pool, void* element);
 
+
+#ifdef __cplusplus
+}
+#endif
 #endif

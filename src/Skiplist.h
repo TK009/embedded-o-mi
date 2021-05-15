@@ -43,6 +43,9 @@
 
 #include "utils.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct SkiplistEntry {  
     void * key;
@@ -70,4 +73,8 @@ Pair Skiplist_set(Skiplist* slist, void* key, void* value);
 
 Pair Skiplist_pop(Skiplist* slist, const void* key); // remove and return the value
 
+
+#ifdef __cplusplus
+}
+#endif
 #endif

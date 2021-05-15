@@ -1,5 +1,8 @@
 #ifndef SETTINGS_H
 #define SETTINGS_H
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifndef ODFTREE_BLOCKS
 // *32 number of latest values stored
@@ -12,4 +15,8 @@
 #endif
 
 
+
+#ifdef __cplusplus
+}
+#endif
 #endif

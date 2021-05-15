@@ -3,6 +3,10 @@
 
 #include <stdlib.h> // size_t
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 # define packed __attribute__((packed))
 
 typedef signed char schar;
@@ -139,4 +143,8 @@ strhash OString_len(OString* self);
 
 #define sizeof_array(a) (sizeof(a) / sizeof(*(a)))
 
+
+#ifdef __cplusplus
+}
+#endif
 #endif
