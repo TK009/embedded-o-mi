@@ -1,0 +1,9 @@
+[submodule "yxml"]
+	path = yxml
+	url = https://g.blicky.net/yxml.git/
+[submodule "c-skiplist"]
+	path = c-skiplist
+	url = https://github.com/tdeck/c-skiplist
+[submodule "platforms/esp32s2/makeEspArduino"]
+	path = platforms/esp32s2/makeEspArduino
+	url = https://github.com/plerup/makeEspArduino

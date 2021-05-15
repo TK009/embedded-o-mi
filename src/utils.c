@@ -116,6 +116,6 @@ strhash OString_len(OString* self){
     return self->length;
 }
 
-static void stdNullFree(void **ptr) {free(*ptr); *ptr = NULL;}
-Allocator stdAllocator = {malloc, calloc, realloc, free, stdNullFree};
+void stdNullFree(void **ptr) {free(*ptr); *ptr = NULL;}
+Allocator stdAllocator = StdAllocator;
 

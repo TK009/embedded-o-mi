@@ -78,6 +78,8 @@ typedef const struct Allocator{
     void (*nullFree)(void **ptr);
 } Allocator;
 
+void stdNullFree(void **ptr);
+#define StdAllocator (Allocator){malloc, calloc, realloc, free, stdNullFree}
 extern Allocator stdAllocator;
 
 #define _NEW_ARGS(T, ...) T ## _init(malloc(sizeof(T)), __VA_ARGS__)

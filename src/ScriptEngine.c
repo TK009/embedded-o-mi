@@ -7,6 +7,7 @@
 
 #include "jerryscript-port.h"
 
+struct Allocator ScriptEngineAllocator = StdAllocator;
 jerry_context_t *scriptEngineContext;
 Path * currentScriptCallbackPath = NULL;
 OmiParser * currentParser = NULL;
@@ -274,15 +275,10 @@ jerry_context_t * jerry_port_get_current_context(void) {
 }
 static void * contextAlloc(size_t size, void *cb_data) {
   (void) cb_data;
-  return malloc (size);
+  return ScriptEngineAllocator.malloc (size);
 }
 
-int ScriptEngine_init() {
-    scriptEngineContext = 
-        jerry_create_context(JS_MEMORY_KB * 1024, contextAlloc, NULL);
-    if (!scriptEngineContext) return -1;
-    jerry_init(JERRY_INIT_EMPTY);
-
+int createGlobalJsApi() {
     int errors = 0;
     jerry_value_t parent, prop, propName, setResult;
     
@@ -292,7 +288,7 @@ int ScriptEngine_init() {
     propName  = jerry_create_string((const jerry_char_t *) "writeItem");
     prop      = jerry_create_external_function(odfWriteItem_handler);
     setResult = jerry_set_property(parent, propName, prop);
-    if (jerry_value_is_error (setResult)) ++errors; // TODO: error handling (log?)
+    //if (jerry_value_is_error (setResult)) ++errors; // TODO: error handling (log?)
     jerry_release_value(prop);
     jerry_release_value(propName);
     jerry_release_value(setResult);
@@ -304,11 +300,22 @@ int ScriptEngine_init() {
     parent    = jerry_get_global_object();
     propName  = jerry_create_string((const jerry_char_t *) "odf");
     setResult = jerry_set_property(parent, propName, prop);
-    if (jerry_value_is_error(setResult)) ++errors; // TODO: error handling (log?)
+    //if (jerry_value_is_error(setResult)) ++errors; // TODO: error handling (log?)
     jerry_release_value(prop);
     jerry_release_value(propName);
     jerry_release_value(setResult);
     jerry_release_value(parent);
+
+    return errors;
+}
+
+int ScriptEngine_init() {
+    scriptEngineContext = 
+        jerry_create_context(JS_MEMORY_KB * 1024, contextAlloc, NULL);
+    if (!scriptEngineContext) return -1;
+    jerry_init(JERRY_INIT_EMPTY);
+
+    int errors = createGlobalJsApi();
 
     
     currentScriptCallbackPath = NULL;
@@ -318,6 +325,6 @@ int ScriptEngine_init() {
 }
 void ScriptEngine_destroy() {
     jerry_cleanup();
-    free(scriptEngineContext);
+    ScriptEngineAllocator.free(scriptEngineContext);
 }
 

@@ -42,6 +42,7 @@ Printf get(int i) {
 ErrorResponse handleScript(OmiParser *p, Path *path, OdfParserEvent event);
 extern MemoryPool HandlerInfoPool;
 jerry_value_t jerry_value_from_infoitem(Path * path);
+int createGlobalJsApi();
 
 #suite ScriptEngine
 
@@ -49,13 +50,6 @@ jerry_value_t jerry_value_from_infoitem(Path * path);
   Allocator latestValueFreer = (Allocator){.free = (FreeF) LatestValue_destroy};
   HString scriptInstance;
   HString *script = &scriptInstance;
-  // tests that external context is configured correctly
-  ck_assert_int_eq(ScriptEngine_init(), 0);
-
-  ck_assert_int_eq(ScriptEngine_testParse(HString_init(script, "\"Hello World!\";")), 0);
-  ck_assert_int_eq(ScriptEngine_testParse(HString_init(script, "var x = 'Hello World!';")), 0);
-  ck_assert_int_eq(ScriptEngine_testParse(HString_init(script, "varx'Hello World!';")), Err_ScriptParse);
-
   OmiParser pa;
   OmiParser *p = &pa;
   OmiParser_init(p, 0);
@@ -85,6 +79,24 @@ jerry_value_t jerry_value_from_infoitem(Path * path);
   };
   LatestValue lv = {.current = {.timestamp=1000, .value.i=8}, .writeHandler=&hi};
   path->value.latest = &lv;
+
+
+
+  // test errors that surface only on invalid initialization, here it is simulated with uninitialized engine
+  //ck_assert_int_eq(createGlobalJsApi(), 2);
+  // NOTE: didn't work, throws seg fault instead
+
+  ScriptEngineAllocator.malloc = nulloc;
+  ck_assert_int_eq(ScriptEngine_init(), -1);
+  ScriptEngineAllocator.malloc = malloc;
+
+  // tests that external context is configured correctly
+  ck_assert_int_eq(ScriptEngine_init(), 0);
+
+  ck_assert_int_eq(ScriptEngine_testParse(HString_init(script, "\"Hello World!\";")), 0);
+  ck_assert_int_eq(ScriptEngine_testParse(HString_init(script, "var x = 'Hello World!';")), 0);
+  ck_assert_int_eq(ScriptEngine_testParse(HString_init(script, "varx'Hello World!';")), Err_ScriptParse);
+
   mark_point(); // show abort error line here if it happens
   ck_assert_int_eq(ScriptEngine_run(NULL, path, HString_init(script, "var x = 'Hello World!';")), 0);
   ck_assert_int_eq(ScriptEngine_run(NULL, path, HString_init(script, "var x = y;")), Err_ScriptRun);

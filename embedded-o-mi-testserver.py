@@ -50,7 +50,8 @@ class CallbackHandler(http.server.BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', '*')
         super().end_headers()
 
-server_address = ('0.0.0.0', int(os.environ.get("PORT", 8081)))
+p = 8081
+server_address = ('0.0.0.0', int(os.environ.get("PORT", p)))
 httpd = http.server.HTTPServer(server_address, CallbackHandler)
-print("Starting server")
+print(f"Starting server: http://localhost:{p}")
 httpd.serve_forever()

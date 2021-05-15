@@ -12,6 +12,7 @@
 #define SCRIPT_QUEUE_LEN 10
 #endif
 
+extern struct Allocator ScriptEngineAllocator;
 int ScriptEngine_init();
 void ScriptEngine_destroy();
 int ScriptEngine_testParse(const HString * script);

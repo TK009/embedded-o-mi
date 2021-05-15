@@ -41,11 +41,12 @@ CXXSTD = -std=c++14
 CSTD = -std=c11 # -D_POSIX_C_SOURCE=200809L
 
 
-#CXX    = g++
-CC     = @clang -fdiagnostics-color=always
-rm     = rm -f
+#CXX     = 
+CC       = @clang -fdiagnostics-color=always
+rm       = rm -f
 DEBUGENV = UBSAN_OPTIONS=print_stacktrace=1 ASAN_OPTIONS=detect_leaks=0 CK_FORK=no
-DB    = gdb
+DB       = gdb
+PY3      = python3
 
 # change these to set the proper directories where each files shoould be
 SRCDIR  := src
@@ -81,7 +82,7 @@ CFLAGS = $(CSTD) $(HEADERS) $(DEBUGFLAGS) $(OPTIMIZE)
 NATIVEJS := $(LIBDIR)/libjerry-core.a $(LIBDIR)/libjerry-ext.a $(LIBDIR)/libjerry-port-default.a
 LIBS := $(NATIVEJS)
 #LDFLAGS = -L$(LIBDIR) -ljerry-core -ljerry-ext -ljerry-port-default #$(LIBS) # -static-libstdc++
-LDFLAGS = $(LIBS) # -static-libstdc++
+LDFLAGS = $(LIBS) -lm # -static-libstdc++
 LDTESTFLAGS = $(COVERAGE) $(CHECKLIB) $(LDFLAGS)
 
 #OBJECTS  := 
@@ -111,9 +112,9 @@ $(OBJDIR)/%.check.c: $(TESTDIR)/%.check | $(OBJDIR)
 	checkmk $< > $@
 
 $(OBJDIR)/%.c: $(SRCDIR)/%.py
-	python3 $< c > $@
+	$(PY3) $< c > $@
 $(OBJDIR)/%.h: $(SRCDIR)/%.py
-	python3 $< h > $@
+	$(PY3) $< h > $@
 
 # fix clean compile by providing some deps manually:
 $(OBJS): $(OBJDIR)/OmiConstants.h
@@ -140,12 +141,12 @@ POSTCOMPILE = @mv -f $(@:.o=.Td) $(@:.o=.d)
 %.o : %.c
 #%.o : %.c $(DEPDIR)/%.d
 $(OBJDIR)/%.o: $(OBJDIR)/%.c $(DEPDIR)/%.d | $(OBJDIR)
-	@echo C $@
+	@echo C $<
 	$(COMPILE.c) $(OUTPUT_OPTION) $<
 	$(POSTCOMPILE)
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c $(DEPDIR)/%.d | $(OBJDIR)
-	@echo C $@
+	@echo C $<
 	$(COMPILE.c) $(OUTPUT_OPTION) $<
 	$(POSTCOMPILE)
 
@@ -158,11 +159,10 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c $(DEPDIR)/%.d | $(OBJDIR)
 $(OBJDIR)/%.test: $(OBJDIR)/%.check.o $(OBJS) $(LIBS)
 	@echo "LINK $@"
 	$(CC) -o $@ $(DEBUGFLAGS) $(OBJS) $< $(LDTESTFLAGS)
-#@echo "LINKING $@ complete!"
 # save .map: -Xlinker -Map=% 
 
 $(BINDIR)/core: $(OBJDIR)/main.o $(OBJS) $(LIBS)
-	@echo "LINKING $@!"
+	@echo "LINK $@"
 	$(CC) -o $@ $(DEBUGFLAGS) $(OBJS) $< $(LDTESTFLAGS)
 
 
@@ -236,21 +236,17 @@ info:
 $(NATIVEJS): $(LIBDIR)
 	@echo
 	@echo MAKE JERRY SCRIPT
-	@cd jerryscript; python3 tools/build.py --clean --debug --lto=OFF --strip=OFF --profile minimal --jerry-cmdline=OFF --external-context=ON
+	@cd jerryscript; $(PY3) tools/build.py --clean --debug --lto=OFF --strip=OFF --profile minimal --jerry-cmdline=OFF --external-context=ON
 	@cp jerryscript/build/lib/* $(LIBDIR)/
 # parallel build fix (the first depends on the second)
 $(word 1,$(NATIVEJS)): $(word 2,$(NATIVEJS))
 $(word 2,$(NATIVEJS)): $(word 3,$(NATIVEJS))
 
-##jerryscript for esp32s2
-#$(ESP32S2JS):
-#	@echo
-#	@echo MAKE JERRY SCRIPT
-#	@cd jerryscript
-#	@python3 tools/build.py --builddir=$(pwd)/build/esp32s2 --toolchain=../jerryscript-toolchain-esp32.cmake --cmake-param "-GUnix Makefiles" --jerry-cmdline=OFF --jerry-port-default=OFF --lto=OFF --strip=OFF --external-context=ON
-## parallel build fix (the first depends on the second)
-#$(word 1,$(ESP32S2JS)): $(word 2,$(ESP32S2JS))
+CMD?=
 
+esp32s2: $(LIBDIR) $(OBJDIR)/OmiConstants.h
+	cd platforms/$@
+	make $(CMD)
 
 # DEPENDENSIES
 
