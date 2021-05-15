@@ -12,7 +12,7 @@
 typedef int (*Printf)(const char*, ...);
 
 typedef struct ConnectionState {
-    bool started;
+    eomi_bool started;
     char *address;
     HandlerInfo *responsibleHandler;
 } ConnectionState;
@@ -28,7 +28,7 @@ typedef struct ConnectionHandler {
 extern ConnectionHandler connectionHandler;
 
 void responseStartWithObjects(const OmiRequestParameters * param, int returnCode);
-void responseStart(const OmiRequestParameters * p, bool hasOdf);
+void responseStart(const OmiRequestParameters * p, eomi_bool hasOdf);
 void responseFullSuccess(const OmiRequestParameters * param);
 void responseFullFailure(const OmiRequestParameters * p, int returnCode,
         const char * description, OmiParser * parser);

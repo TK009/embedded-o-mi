@@ -71,10 +71,10 @@ void freeHString(const HString *str) {
     meta->numUsages--;
 }
 // only checks whether str exists
-bool hStringExists(const HString *str) {
+eomi_bool hStringExists(const HString *str) {
     return Skiplist_get(&stringStorage, str) != NULL;
 }
-bool stringExists(const char *str) {
+eomi_bool stringExists(const char *str) {
     HString tmp;
     return hStringExists(HString_init(&tmp, str));
 }

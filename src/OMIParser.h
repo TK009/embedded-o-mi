@@ -122,7 +122,7 @@ struct OmiParser {
 OmiParser* OmiParser_init(OmiParser* p, uchar connectionId);
 void OmiParser_destroy(OmiParser* p);
 
-// Return true on success, false on failure
+// Return eomi_true on success, eomi_false on failure
 ErrorResponse OmiParser_pushPath(OmiParser* p, OdfId id, PathFlags flags);
 Path* OmiParser_popPath(OmiParser* p);
 

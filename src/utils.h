@@ -37,10 +37,10 @@ schar int_compare(const int *a, const int *b);
 schar uint_compare(const uint *a, const uint *b);
 
 // Typed bool
-#undef true
-#undef false
-#undef bool
-typedef enum {false=0, true=1} bool;
+//#undef true
+//#undef false
+//#undef bool
+typedef enum {eomi_false=0, eomi_true=1} eomi_bool;
 
 int binarySearch(
         const void* v_collection,
@@ -70,7 +70,7 @@ int first1Bit(int i);
 int first0Bit(int i);
 
 typedef void (*FreeF)(void *);
-typedef const struct Allocator{
+typedef const struct Allocator_t{
     void* (*malloc)(size_t size);
     void* (*calloc)(size_t n, size_t size);
     void* (*realloc)(void *ptr, size_t size);
@@ -82,10 +82,10 @@ void stdNullFree(void **ptr);
 #define StdAllocator (Allocator){malloc, calloc, realloc, free, stdNullFree}
 extern Allocator stdAllocator;
 
-#define _NEW_ARGS(T, ...) T ## _init(malloc(sizeof(T)), __VA_ARGS__)
-#define _NEW(T) T ## _init(malloc(sizeof(T)))
-#define NEW(...) IF_1_ELSE(__VA_ARGS__)(_NEW(__VA_ARGS__))(_NEW_ARGS(__VA_ARGS__))
-#define DEL(T) do{ T ## _destroy(T); free(T); T=NULL;} while (0)
+//#define _NEW_ARGS(T, ...) T ## _init(malloc(sizeof(T)), __VA_ARGS__)
+//#define _NEW(T) T ## _init(malloc(sizeof(T)))
+//#define NEW(...) IF_1_ELSE(__VA_ARGS__)(_NEW(__VA_ARGS__))(_NEW_ARGS(__VA_ARGS__))
+//#define DEL(T) do{ T ## _destroy(T); free(T); T=NULL;} while (0)
 // TODO
 // EXAMPLE:
 // typedef struct {

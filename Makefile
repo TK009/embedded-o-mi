@@ -177,6 +177,9 @@ $(BINDIR)/core: $(OBJDIR)/main.o $(OBJS) $(LIBS)
 clean:
 	$(rm) -rf $(OBJDIR)
 	$(rm) default.profraw
+	$(rm) -rf $(LIBDIR)
+	$(rm) -rf jerryscript/build
+	for p in platforms/*; do cd $(p) && make clean
 	@echo "Cleanup complete!"
 
 SHELL=/bin/bash -o pipefail
@@ -244,9 +247,8 @@ $(word 2,$(NATIVEJS)): $(word 3,$(NATIVEJS))
 
 CMD?=
 
-esp32s2: $(LIBDIR) $(OBJDIR)/OmiConstants.h
-	cd platforms/$@
-	make $(CMD)
+esp32s2: $(OBJDIR)/OmiConstants.h $(OBJDIR)/OmiConstants.c
+	cd platforms/$@ && make $(CMD)
 
 # DEPENDENSIES
 

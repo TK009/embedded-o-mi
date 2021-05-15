@@ -73,7 +73,7 @@ typedef struct OdfTree {
 OdfTree* OdfTree_init(OdfTree* self, Path* pathStorageArray, int arrayCapacity);
 void OdfTree_destroy(OdfTree* self, Allocator* idAllocator, Allocator* valueAllocator);
 
-// returns true if found, false if not found. `result` contains index of found
+// returns eomi_true if found, eomi_false if not found. `result` contains index of found
 // or the index of the next closest element.
 int odfBinarySearch(const OdfTree* tree, const Path* needle, int* resultIndex);
 

@@ -27,7 +27,7 @@ const char* omiVersionNumStr(OmiVersion v) {
 
 // TODO: inline function cleanup: parameter for send function
 
-void responseStart(const OmiRequestParameters * p, bool hasOdf){
+void responseStart(const OmiRequestParameters * p, eomi_bool hasOdf){
     //snprintf("<%s %s=\"%s\" %s=\"%s\" %s=\"%f\">"
     //        , connectionHandler.stringBufferLen, connectionHandler.stringBuffer
     //        , s_omiEnvelope
@@ -102,7 +102,7 @@ void responseReturnCode(const OmiRequestParameters * p, int returnCode, const ch
 
 void responseStartWithObjects(const OmiRequestParameters * p, int returnCode){
     Printf send = connectionHandler.getPrintfForConnection(p->connectionId);
-    responseStart(p, true);
+    responseStart(p, eomi_true);
     responseReturnCode(p, returnCode, NULL);
     send("<"); send(s_msg); send(">");
     send("<"); send(s_Objects); send(" ");
@@ -115,7 +115,7 @@ void responseStartWithObjects(const OmiRequestParameters * p, int returnCode){
 }
 void responseRequestId(const OmiRequestParameters * p, uint requestId) {
     Printf send = connectionHandler.getPrintfForConnection(p->connectionId);
-    responseStart(p, false);
+    responseStart(p, eomi_false);
     responseReturnCode(p, 200, NULL);
     send("<"); send(s_requestID);
     send(">%d</", requestId); send(s_requestID); send(">");
@@ -123,7 +123,7 @@ void responseRequestId(const OmiRequestParameters * p, uint requestId) {
 }
 
 void responseFullSuccess(const OmiRequestParameters * p){
-    responseStart(p, false);
+    responseStart(p, eomi_false);
     responseReturnCode(p, 200, NULL);
     responseEnd(p);
 }
@@ -137,7 +137,7 @@ void responseEndWithFailure(const OmiRequestParameters * p, int returnCode, cons
 }
 void responseFullFailure(const OmiRequestParameters * p, int returnCode,
         const char * description, OmiParser * parser){
-    responseStart(p, false);
+    responseStart(p, eomi_false);
     char d[100];
     if (parser) {
         switch (parser->st) {

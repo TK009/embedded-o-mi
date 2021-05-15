@@ -394,7 +394,7 @@ static ErrorResponse noopPathCb(OmiParser *p, Path *a, OdfParserEvent b) {
     //ck_assert_str_eq(current->i, -1); freed already
     testValue("<value type=\"xs:boolean\">false</value>", V_Boolean);
     testValue("<value type=\"xs:boolean\">garbage</value>", V_Boolean);
-    ck_assert((bool)current->i);
+    ck_assert((eomi_bool)current->i);
     testValue("<value type=\"xs:unsignedInt\">1</value>", V_UInt);
     ck_assert_int_eq(current->i, 1);
     testValue("<value type=\"xs:unsignedShort\">1</value>", V_UShort);

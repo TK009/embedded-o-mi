@@ -77,7 +77,7 @@ schar pathCompare(const Path *a, const Path *b) {
     return a->depth - b->depth; // should be -1 or 1
 }
 
-// returns true if found, false if not found. `result` contains index of found
+// returns eomi_true if found, eomi_false if not found. `result` contains index of found
 // or the index of the next closest element.
 int odfBinarySearch(const OdfTree* tree, const Path* needle, int* result) {
     return binarySearch(

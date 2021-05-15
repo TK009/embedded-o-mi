@@ -49,7 +49,7 @@ eomi_time parseDateTime(const char * dateStr) {
     return mktime(&datetime);
 }
 
-inline bool parseBoolean(strhash hash) {
+inline eomi_bool parseBoolean(strhash hash) {
     switch (hash) {
         case h_1:
         case h_true:
@@ -57,15 +57,15 @@ inline bool parseBoolean(strhash hash) {
         case h_TRUE:
         case h_on:
         case h_ON:
-            return true;
+            return eomi_true;
         case h_0:
         case h_false:
         case h_False:
         case h_FALSE:
         case h_off:
         case h_OFF:
-            return false;
+            return eomi_false;
         default:
-            return true;
+            return eomi_true;
     }
 }

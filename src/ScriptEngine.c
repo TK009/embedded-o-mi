@@ -7,7 +7,7 @@
 
 #include "jerryscript-port.h"
 
-struct Allocator ScriptEngineAllocator = StdAllocator;
+Allocator ScriptEngineAllocator = StdAllocator;
 jerry_context_t *scriptEngineContext;
 Path * currentScriptCallbackPath = NULL;
 OmiParser * currentParser = NULL;

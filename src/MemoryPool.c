@@ -55,17 +55,17 @@ void* poolCAlloc(MemoryPool *pool) {
     return p;
 }
 
-bool poolExists(MemoryPool *pool, void* element) {
+eomi_bool poolExists(MemoryPool *pool, void* element) {
     if (element > pool->data && (char*)element < ((char*)pool->data)+pool->totalCount*pool->elementSize) { // extra checks
         int memoryOffset = (char*)element - (char*) pool->data;
-        if (memoryOffset % pool->elementSize != 0) return false; // extra checks
+        if (memoryOffset % pool->elementSize != 0) return eomi_false; // extra checks
         int elementNumber = memoryOffset / pool->elementSize;
         ushort blockNum = elementNumber / BlockSize;
         int bitLocation = elementNumber - blockNum * BlockSize;
 
         return pool->reservedBitArray[blockNum] & (1u << bitLocation);
     }
-    return false;
+    return eomi_false;
 }
 
 // Free element indicated by pointer to the start of the element

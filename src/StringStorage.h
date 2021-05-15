@@ -39,8 +39,8 @@ const char * storeString(const char *str);
 void freeHString(const HString *str);
 void freeString(const char *str);
 // only checks whether str exists
-bool hStringExists(const HString *str);
-bool stringExists(const char *str);
+eomi_bool hStringExists(const HString *str);
+eomi_bool stringExists(const char *str);
 
 extern Allocator stringStorageFreecator;
 

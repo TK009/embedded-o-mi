@@ -49,6 +49,6 @@ void* poolCAlloc(MemoryPool *pool);
 void poolFree_(MemoryPool *pool, void** element);
 #define poolFree(pool, ptr) poolFree_((pool), (void**)&(ptr))
 
-bool poolExists(MemoryPool *pool, void* element);
+eomi_bool poolExists(MemoryPool *pool, void* element);
 
 #endif

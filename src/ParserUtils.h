@@ -7,6 +7,6 @@ double parseDouble(const char* str);
 int parseInt(const char* str);
 long long parseLong(const char* str);
 eomi_time parseDateTime(const char * dateStr);
-bool parseBoolean(strhash hash);
+eomi_bool parseBoolean(strhash hash);
 
 #endif

@@ -125,7 +125,7 @@ Printf get(int i) {
     AssertResponseEquals("<value unixTime=\"10\" type=\"xs:short\">-1234</value></InfoItem>");
     TestValue(V_Byte, b, (char) -120);
     AssertResponseEquals("<value unixTime=\"10\" type=\"xs:byte\">-120</value></InfoItem>");
-    TestValue(V_Boolean, i, true);
+    TestValue(V_Boolean, i, eomi_true);
     AssertResponseEquals("<value unixTime=\"10\" type=\"xs:boolean\">1</value></InfoItem>");
     TestValue(V_ULong, l, 18446744073709551615ul);
     AssertResponseEquals("<value unixTime=\"10\" type=\"xs:unsignedLong\">18446744073709551615</value></InfoItem>");

@@ -25,7 +25,7 @@
 #include <string.h>
 #include <time.h>
 
-bool seeded = false;
+eomi_bool seeded = eomi_false;
 
 
 // Returns a random number in the range [1, max] following the geometric 
@@ -46,7 +46,7 @@ Skiplist * Skiplist_init(Skiplist* sl, compareFunc compare, Allocator* a){
         // Seed the random number generator if we haven't yet
         if (!seeded) {
             srand((uint) time(NULL));
-            seeded = true;
+            seeded = eomi_true;
         }
 
 
