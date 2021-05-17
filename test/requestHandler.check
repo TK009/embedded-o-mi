@@ -51,6 +51,7 @@ int erronousHandler(OmiParser* p, Path * path, OdfParserEvent e) {
   return Err_InternalError;
 }
 
+
 #suite requestHandler
 
 
@@ -131,7 +132,7 @@ int erronousHandler(OmiParser* p, Path * path, OdfParserEvent e) {
     // The real description
     ck_assert(!odfBinarySearch(&tree, path, &resultIndex));
     ck_assert_int_eq(tree.size, 3);
-    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_Path, ("My description"))), Err_OK); // not allocating the data because hard to free in test
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_Path, stra("My description"))), Err_OK);
     ck_assert(odfBinarySearch(&tree, path, &resultIndex));
     ck_assert(stringExists("description"));
     ck_assert(stringExists("MyObject"));
@@ -262,7 +263,7 @@ int erronousHandler(OmiParser* p, Path * path, OdfParserEvent e) {
 
 
 
-    OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
+    OdfTree_destroy(&tree, &StringStorageAllocator, &latestValueFreer);
     RequestHandler_init();
     // Write Meta + description
     p->parameters.requestType = OmiWrite;
@@ -274,7 +275,7 @@ int erronousHandler(OmiParser* p, Path * path, OdfParserEvent e) {
     ck_assert_int_eq(handleWrite(p, Path_init(p->currentOdfPath+1,
       PathGetDepth(p->currentOdfPath)+1, OdfDescription,
       p->currentOdfPath, "description", 0),
-      OdfParserEvent(PE_Path, ("Info desc."))// not allocating the data because hard to free in test
+      OdfParserEvent(PE_Path, stra("Info desc."))
     ), Err_OK);
     //OmiParser_popPath(p);
     OmiParser_pushPath(p, "MetaData", OdfMetaData);
@@ -327,7 +328,7 @@ int erronousHandler(OmiParser* p, Path * path, OdfParserEvent e) {
 
 
     //OdfTree_destroy(&tree, &stdAllocator, &latestValueFreer);
-    OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
+    OdfTree_destroy(&tree, &StringStorageAllocator, &latestValueFreer);
     RequestHandler_init();
 
     // Test for object closing bug
@@ -353,7 +354,7 @@ int erronousHandler(OmiParser* p, Path * path, OdfParserEvent e) {
       "</Objects></msg></result></response></omiEnvelope>");
     
 
-    OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
+    OdfTree_destroy(&tree, &StringStorageAllocator, &latestValueFreer);
     OmiParser_destroy(p);
 
 
@@ -517,7 +518,7 @@ int erronousHandler(OmiParser* p, Path * path, OdfParserEvent e) {
     ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueUnixTime, stra("9999"))), Err_OK);
     ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueData, stra("5"))), Err_InternalError);
 
-    OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
+    OdfTree_destroy(&tree, &StringStorageAllocator, &latestValueFreer);
     OmiParser_destroy(p);
 
     // Test MetaData skipping with system test
@@ -573,7 +574,7 @@ int erronousHandler(OmiParser* p, Path * path, OdfParserEvent e) {
 
     
 
-    OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
+    OdfTree_destroy(&tree, &StringStorageAllocator, &latestValueFreer);
     OmiParser_destroy(p);
 
 #test latestValuesMiscT

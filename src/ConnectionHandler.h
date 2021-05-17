@@ -18,7 +18,7 @@ typedef int (*Printf)(const char*, ...);
 typedef struct ConnectionState {
     eomi_bool started;
     char *address;
-    HandlerInfo *responsibleHandler;
+    HandlerInfo *responsibleHandler; // contains the real connection Id
 } ConnectionState;
 
 

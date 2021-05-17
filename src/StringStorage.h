@@ -21,6 +21,8 @@ extern "C" {
 #define StringFree free
 #endif
 
+extern Allocator StringStorageAllocator;
+
 typedef struct StringMetadata {
     ushort numUsages;
 } StringMetadata;

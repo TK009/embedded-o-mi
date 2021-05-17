@@ -26,7 +26,7 @@ void LatestValue_destroy(Path * path) {
     if (p->current.typeString) StringFree((void*)p->current.typeString);
     if (p->upcoming.typeString) StringFree((void*)p->upcoming.typeString);
     if (p->writeHandler) HandlerInfoPool_free(p->writeHandler);
-    if ((path->flags & PF_ValueType) == V_String) free(p->current.value.str);
+    if ((path->flags & PF_ValueType) == V_String && p->current.value.str) freeString(p->current.value.str);
     LatestValues_free(p);
 }
 
@@ -138,7 +138,8 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
             // metadata-like value
             if (event.data) {
                 storedPathSegment->flags |= PF_ValueMalloc;
-                storedPathSegment->value.str = event.data; // NOTE: free not needed
+                storedPathSegment->value.str = storeString(event.data);
+                p->stringAllocator->free(event.data);
             }
             break;
         case PE_ValueUnixTime:
@@ -165,11 +166,12 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
             return Err_InternalError; // break;
         case PE_ValueType:
             // NOTE: Unknown value type: use string type for storage!
-            path->flags = (path->flags & ~PF_ValueType) | V_String;
-
+            if (path->flags & PF_ValueType != V_String){
+                path->flags = (path->flags & ~PF_ValueType & ~PF_IsNewWithoutValue) | V_String | PF_IsNewWithoutValue;
+            }
             //if (odfBinarySearch(&tree, path, &resultIndex)) {
             //    storedPathSegment = &tree.sortedPaths[resultIndex];
-            //    storedPathSegment->value.latest->upcoming.typeString = event.data; // NOTE: free not needed
+            //    storedPathSegment->value.latest->upcoming.typeString = event.data; // FIXME: free not needed
             //    return Err_OK;
             //}
             if (event.data) p->stringAllocator->free(event.data);
@@ -188,7 +190,7 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
 
                 // store value
                 if (event.data) { // String type value
-                    latest->upcoming.value.str = event.data; // NOTE: free not needed
+                    latest->upcoming.value.str = storeString(event.data);
                     if (!wasAllocatedString ||
                             (latest->current.value.str &&
                             strcmp(latest->upcoming.value.str, latest->current.value.str) != 0)) {
@@ -239,7 +241,10 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                             //    }
                             //}
                             if (!subInfo) subInfo = (HandlerInfo*) poolAlloc(&HandlerInfoPool);
-                            if (!subInfo) return Err_OOM;
+                            if (!subInfo) {
+                                p->stringAllocator->free(event.data);
+                                return Err_OOM;
+                            }
                             *subInfo = (HandlerInfo){
                                 .handlerType = HT_Script, 
                                 .callbackInfo = p->parameters, 
@@ -253,16 +258,19 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                             addSubscription(NULL, subscriptionTarget, &subInfo);
                         }
                     }
-                    //storedPathSegment->flags &= ~PF_IsNewWithoutValue;
+                    if (storedPathSegment->flags & PF_IsNewWithoutValue) {
+                        // free old
+                        if (wasAllocatedString && latest->current.value.str)
+                            freeString(latest->current.value.str);
+                        //storedPathSegment->flags &= ~PF_IsNewWithoutValue;
+                    }
                     // update flags, retaining old, and reset type just in case, TODO: handle type change if history is implemented
                     storedPathSegment->flags = (storedPathSegment->flags & ~PF_ValueType & ~PF_IsNewWithoutValue) | path->flags;
                 }
                 //if (((storedPathSegment->flags & PF_ValueType) != V_String)
                 //        && (latest->current.value.l != latest->upcoming.value.l)) changed = true;
 
-                // free old
-                if (wasAllocatedString)
-                    p->stringAllocator->free(latest->current.value.str);
+                if (event.data) p->stringAllocator->free(event.data);
 
                 // FIXME: optimize event responses (do not read the already found path)
                 // update

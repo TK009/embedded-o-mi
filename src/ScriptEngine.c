@@ -12,7 +12,7 @@ Path * currentScriptCallbackPath = NULL;
 OmiParser * currentParser = NULL;
 
 #if SCRIPT_QUEUE_LEN > 126
-#warning SCRIPT_QUEUE_LEN too large for implementation datatypes
+#error SCRIPT_QUEUE_LEN too large for implementation datatypes
 #endif
 
 // TODO: Better queue implementation

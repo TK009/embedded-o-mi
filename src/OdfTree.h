@@ -19,7 +19,7 @@ typedef union AnyValue {
     //uint ui;
     int i;
     int64 l;
-    char * str;
+    const char * str;
     LatestValue * latest;
     void * obj;
 } AnyValue;
@@ -75,7 +75,6 @@ typedef struct OdfTree {
 } OdfTree;
 
 OdfTree* OdfTree_init(OdfTree* self, Path* pathStorageArray, int arrayCapacity);
-void OdfTree_destroy(OdfTree* self, Allocator* idAllocator, Allocator* valueAllocator);
 
 // returns eomi_true if found, eomi_false if not found. `result` contains index of found
 // or the index of the next closest element.

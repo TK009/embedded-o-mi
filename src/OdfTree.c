@@ -44,20 +44,6 @@ OdfTree* OdfTree_init(OdfTree* self, Path* pathStorageArray, int arrayCapacity) 
     }
     return self;
 }
-void OdfTree_destroy(OdfTree* self, Allocator* stringAllocator, Allocator* valueAllocator) {
-    for (int i = 0; i < self->size; ++i) {
-        Path * p = &self->sortedPaths[i];
-        if (p->flags & PF_OdfIdMalloc)
-            stringAllocator->free((void*)p->odfId);
-        if (p->flags & PF_ValueMalloc) {
-            if (PathGetNodeType(p) == OdfInfoItem) {
-                valueAllocator->free(p);
-                //valueAllocator->free(p->value.obj);
-            }else
-                stringAllocator->free(p->value.str);
-        }
-    }
-}
 
 
 

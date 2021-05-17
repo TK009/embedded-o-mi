@@ -6,9 +6,8 @@ CreateStaticMemoryPool(HString, stringWrappers, StringStorageMaxStringBlocks)
 
 Skiplist stringStorage;
 
-Allocator stringStorageFreecator = (Allocator){
-    .free = (FreeF) freeString
-};
+// default
+Allocator StringStorageAllocator = StdAllocator;
 
 void StringStorage_init() {
     Skiplist_init(&stringStorage, (compareFunc)HString_compare, &stringStorageEntriesAllocator);
@@ -37,7 +36,7 @@ const char * storeHString(const HString *str) {
             poolFree(&stringWrappers, newStringWrapper);
             return NULL;
         }
-        char * copiedStr = StringAllocator(str->length+1);
+        char * copiedStr = StringStorageAllocator.malloc(str->length+1);
         copiedStr = strncpy(copiedStr, str->value, str->length);
         copiedStr[str->length] = '\0';
         newStringWrapper->value = copiedStr;
@@ -63,7 +62,7 @@ void freeHString(const HString *str) {
     StringMetadata * meta = elem->value;
     if (meta->numUsages == 1) {
         Skiplist_del(&stringStorage, elem, prev);
-        StringFree((void*) string->value);
+        StringStorageAllocator.free((void*) string->value);
         poolFree(&stringStorageMetadatas, meta);
         poolFree(&stringWrappers, string);
         return;

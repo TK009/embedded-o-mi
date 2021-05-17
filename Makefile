@@ -42,7 +42,7 @@ CSTD = -std=c11 # -D_POSIX_C_SOURCE=200809L
 
 
 #CXX     = 
-CC       = @clang -fdiagnostics-color=always
+CC       = @ccache clang -fdiagnostics-color=always
 rm       = rm -f
 DEBUGENV = UBSAN_OPTIONS=print_stacktrace=1 ASAN_OPTIONS=detect_leaks=0 CK_FORK=no
 DB       = gdb
@@ -91,7 +91,7 @@ EXECUTABLES := $(BINDIR)/core
 
 
 
-# TODO: embedded compilation
+.PHONY: clean debug test coverageclean coverage coverage-html all
 all: $(EXECUTABLES) $(TESTBINARIES)
 	
 $(EXECUTABLES): | $(BINDIR)
@@ -111,9 +111,9 @@ $(LIBDIR):
 $(OBJDIR)/%.check.c: $(TESTDIR)/%.check | $(OBJDIR)
 	checkmk $< > $@
 
-$(OBJDIR)/%.c: $(SRCDIR)/%.py $(OBJDIR)
+$(OBJDIR)/%.c: $(SRCDIR)/%.py | $(OBJDIR)
 	$(PY3) $< c > $@
-$(OBJDIR)/%.h: $(SRCDIR)/%.py $(OBJDIR)
+$(OBJDIR)/%.h: $(SRCDIR)/%.py | $(OBJDIR)
 	$(PY3) $< h > $@
 
 # fix clean compile by providing some deps manually:
@@ -173,7 +173,6 @@ $(BINDIR)/core: $(OBJDIR)/main.o $(OBJS) $(LIBS)
 #	@$(CC) $(MYCFLAGS) -MM $< -MF $(OBJDIR)/$*.d # dependencies
 #	@sed -i '1s|^.*:|$@:|' $(OBJDIR)/$*.d # fix target path 
 
-.PHONEY: clean debug test coverageclean coverage coverage-html
 clean:
 	$(rm) -rf $(OBJDIR)
 	#$(rm) default.profraw
@@ -236,7 +235,7 @@ info:
 # JERRY SCRIPT
 
 
-$(NATIVEJS): $(LIBDIR)
+$(NATIVEJS): | $(LIBDIR)
 	@echo
 	@echo MAKE JERRY SCRIPT
 	@cd jerryscript; $(PY3) tools/build.py --clean --debug --lto=OFF --strip=OFF --profile minimal --jerry-cmdline=OFF --external-context=ON
@@ -248,7 +247,7 @@ $(word 2,$(NATIVEJS)): $(word 3,$(NATIVEJS))
 CMD?=
 
 esp32s2: $(OBJDIR)/OmiConstants.h $(OBJDIR)/OmiConstants.c
-	cd platforms/$@ && make $(CMD)
+	@cd platforms/$@ && make $(CMD)
 
 # DEPENDENSIES
 

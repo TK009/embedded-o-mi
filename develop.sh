@@ -5,8 +5,8 @@ if [[ $1 == "debug" ]]; then
     exit 0
 fi
 
-watch.sh 'src/* test/* Makefile' "\
- make all -j -O && make test && make coverage-html; \
+watch.sh 'src/* test/* platforms/** Makefile' "\
+ make all -j -O && make test && make coverage-html && make esp32s2 && \
  make --always-make --dry-run \
  | grep -wE 'clang' \
  | grep -w '\-c' \

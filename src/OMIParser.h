@@ -32,15 +32,13 @@ extern "C" {
 #define OdfDepthLimit 15
 #endif
 
+
 // Something like finite state machine here
 
 typedef enum OmiParserState {
     OmiState_Ready = 0,
     OmiState_PreOmiEnvelope,    // before "_<omiEnvelope "
-    //OmiState_OmiEnvelopeAttr,   // inside "<omiEnvelope _>"
     OmiState_OmiEnvelope,   // inside "<omiEnvelope _>" or after
-    //OmiState_PreVerb,           // after omeEnvelope open tag, before request verb "<omiEnvelope>_<"
-    //OmiState_VerbAttr,          // inside omi request verb
     OmiState_Verb,          // inside omi request verb
     OmiState_Response,
     OmiState_Result,
@@ -150,8 +148,6 @@ char* storeTempString(OmiParser *p, const char * str, size_t stringLength);
 OmiParser* getParser(uchar connectionId);
 ErrorResponse runParser(OmiParser * p, char * inputChunk);
 yxml_ret_t runXmlParser(OmiParser * p, char ** inputChunkP, uint maxBytes);
-
-//StringStorage stringStorage;
 
 
 OmiVersion parseOmiVersion(strhash xmlns);

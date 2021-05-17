@@ -368,7 +368,7 @@ int createGlobalJsApi();
   mark_point();
   ScriptEngine_destroy();
   mark_point();
-  OdfTree_destroy(&tree, &stringStorageFreecator, &latestValueFreer);
+  OdfTree_destroy(&tree, &StringStorageAllocator, &latestValueFreer);
   mark_point();
   OmiParser_destroy(p);
   mark_point();
