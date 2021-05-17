@@ -239,7 +239,8 @@ static ErrorResponse noopPathCb(OmiParser *p, Path *a, OdfParserEvent b) {
     p->parameters.connectionId = 1;
     testState( "<read callback=\"0\">", OmiState_Verb);
     ck_assert_int_eq(p->parameters.requestType, OmiRead);
-    ck_assert_int_eq(*p->parameters.callbackAddr, 11);
+    //ck_assert_int_eq(*p->parameters.callbackAddr, 11);
+    ck_assert_str_eq(p->parameters.callbackAddr, "0");
 
     p->st = OmiState_OmiEnvelope;
     testState( "<delete>", OmiState_Verb);

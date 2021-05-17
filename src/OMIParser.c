@@ -213,9 +213,9 @@ static inline int processVerb(OmiParser *p, yxml_ret_t r) {
                     p->parameters.interval = parseFloat(p->tempString); // NOTE time unit?; full seconds or ms?
                     break;
                 case h_callback:
-                    if (p->tempStringLength == 1 && p->tempString[0] == '0') { // current connection
-                        p->tempString[0] = (char) p->parameters.connectionId + 10; // we don't want to use 0 (null)
-                    }
+                    //if (p->tempStringLength == 1 && p->tempString[0] == '0') { // current connection
+                    //    p->tempString[0] = (char) p->parameters.connectionId + 10; // we don't want to use 0 (null)
+                    //}
                     storeTempStringOrError(p->parameters.callbackAddr);
                     break;
                 default:

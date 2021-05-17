@@ -295,7 +295,7 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                             // cancel sub if not successful
                             // handleCancel()
 
-                            if (p->parameters.connectionId >= 0){ // skip on internal callbacks
+                            if (p->parameters.callbackAddr && p->parameters.callbackAddr[0] == '0' && p->parameters.connectionId >= 0){ // skip on internal callbacks
                                 connectionHandler.connections[p->parameters.connectionId].responsibleHandler = handler;
                                 p->callbackOpenFlag |= 1 << p->parameters.connectionId;
                             }
