@@ -218,8 +218,13 @@ void responseFullFailure(const OmiRequestParameters * p, int returnCode,
         break
 
 void responseTypeAndValue(Printf send, const Path * node){
+        //caseResponseValue(V_String, s_xsstring, "%s", str);
     switch (node->flags & PF_ValueType) {
-        caseResponseValue(V_String, s_xsstring, "%s", str);
+        case V_String:
+            send(s_xsstring); send("\">");
+            send(node->value.latest->current.value.str);
+            send("</"); send(s_value); send(">");
+            break;
         caseResponseValue(V_Int, s_xsint, "%d", i);
         caseResponseValue(V_Float, s_xsfloat, "%f", f);
         caseResponseValue(V_Long, s_xslong, "%ld", l);

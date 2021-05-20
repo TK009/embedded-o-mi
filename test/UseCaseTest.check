@@ -1,0 +1,72 @@
+// vim: syntax=c
+#include "requestHandler.h"
+#include "StringStorage.h"
+#include "ScriptEngine.h"
+#include "testUtils.h"
+#include "OdfTree.h"
+#include <stdio.h>
+
+char actualResponse[2048]; // max response size for tests
+char * bufferLocation = actualResponse;
+int saveActualResponse(const char * format, ...) {
+  va_list argptr;
+  va_start(argptr, format);
+  int ret = vsprintf(bufferLocation, format, argptr);
+  if (ret > 0) bufferLocation += ret;
+  return 0;
+}
+Printf get(int i) {
+  //if (i==2)
+  //  return saveActualCallback;
+  return saveActualResponse;
+}
+#define ResetBuffer() bufferLocation = actualResponse; bufferLocation[0] = '\0'
+#define AssertResponseEquals(expected) \
+  ck_assert_str_eq(actualResponse, (expected)); \
+  ResetBuffer()
+
+
+#suite UseCase
+#test UseCaseT
+  const char readAll =
+    "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/1.0/\" version=\"1.0\" ttl=\"0\">"
+    "  <read msgformat=\"odf\">"
+    "    <msg>"
+    "      <Objects xmlns=\"http://www.opengroup.org/xsd/odf/1.0/\">"
+    "      </Objects>"
+    "    </msg>"
+    "  </read>"
+    "</omiEnvelope>";
+  RequestHandler_init();
+  StringStorage_init();
+  ck_assert(!ScriptEngine_init());
+
+  OmiParser pa;
+  OmiParser *p = &pa;
+  OmiParser_init(p, 0);
+  p->parameters.requestType = OmiWrite;
+
+  Path paths[20]; 
+  OdfTree odf;
+  OdfTree_init(&odf, paths, 20);
+  Path * path;
+  path = addPath(&odf, "Objects/Device", OdfObject);
+  handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
+  path = addPath(&odf, "Objects/Device/MCU", OdfInfoItem);
+  handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
+  path->flags = V_String;
+  handleWrite(p, path, OdfParserEvent(PE_ValueData, stra("ESP32S2")));
+
+  //ErrorResponse result = runParser(p, readAll);
+  //switch (result) {
+  //  case Err_OK: break;
+  //  default:
+  //    responseFromErrorCode(p, result);
+  //  case Err_End:
+  //    //endWsMessage(id);
+  //    OmiParser_destroy(p);
+  //    OmiParser_init(p, p->parameters.connectionId);
+  //    break;
+  //}
+  //AssertResponseEquals("")
+

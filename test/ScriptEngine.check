@@ -66,7 +66,7 @@ int createGlobalJsApi();
   OdfTree odf;
   OdfTree_init(&odf, paths, 20);
   Path * path = addPath(&odf, "Objects/MyObject/MyItem", OdfInfoItem);
-  PathSetNodeType(path, OdfInfoItem);
+  //PathSetNodeType(path, OdfInfoItem);
   path->flags = V_Int;
   HandlerInfo hi = {
       .handlerType = HT_Subscription, 

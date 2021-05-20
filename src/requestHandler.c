@@ -166,7 +166,7 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
             return Err_InternalError; // break;
         case PE_ValueType:
             // NOTE: Unknown value type: use string type for storage!
-            if (path->flags & PF_ValueType != V_String){
+            if ((path->flags & PF_ValueType) != V_String){
                 path->flags = (path->flags & ~PF_ValueType & ~PF_IsNewWithoutValue) | V_String | PF_IsNewWithoutValue;
             }
             //if (odfBinarySearch(&tree, path, &resultIndex)) {

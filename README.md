@@ -27,7 +27,11 @@ Features
 --------
 
 * In-memory, linear array store for O-DF paths (in http get format of the standards)
-   * Single value store (no history) with timestamps
+   * Single value store (without history) with timestamps
+* Transfer protocols:
+   * WebSocket connections, multiple concurrent allowed
+   * callback protocols: WebSocket
+   * TODO: Http POST, Http GET data discovery
 * O-MI requests
    * Write
    * Read
@@ -36,12 +40,19 @@ Features
       * Event subscriptions (interval = -1)
    * Cancel
    * Delete: TODO
+* Scripting:
+   * Write to MetaData, an InfoItem named `onwrite` and write JavaScript to the value
+   * Incoming write requests will call the script with globals `event.value`
+       and `event.unixTime` containing the written value
+   * Use `odf.writeItem(value, path)` to write any results to InfoItem indicated by the O-DF path
+   * The engine supports [these features](https://github.com/jerryscript-project/jerryscript/blob/master/jerry-core/profiles/README.md)
+     unless set otherwise during compilation in the config file `./platforms/*/jerryscript.config`
 
 ### Complexity
 (n is number of O-DF nodes in the memory):
 * Reading a path is ~O(log(n))
 * Reading a subtree is ~O(log(n)+t), where t is the size of the subtree.
-* Writing a new path is ~O(n) worst case due to array move
+* Writing a new path is ~O(n) worst case, due to array move, specially presorted write to empty tree is O(1)
 * Writing into existing path is ~O(log(n))
 * Subscribing a path is ~O(log(n))
 * Subscription cancel/end is ~O(n), but could be accelerated easily
@@ -62,9 +73,12 @@ Undecided features (should be implemented or not?):
 
 Sorted by about highest to lowest priority:
 
+* Automatic current connection subscription cancel on connection close
 * Fix script write self path causing incorrect subscription notifications when subscribing after script addition
    - first result is the raw value and second is value modified and written by the script
    - options include maintaining write handler order with scripts having higher priority or in separate item/list
+   - manual workaround: always write to other item in scripts
+* Streaming output (esp async websocket library add chunk stream)
 * Script API: read infoitems
 * Object(s) level subscriptions that expand when new children are added 
 * Flash storage for latest values

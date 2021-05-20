@@ -5,15 +5,23 @@ ESP_ROOT:=$(HOME)/esp/arduino-esp32
 
 # use: make list_flash_defs
 #FLASH_DEF
+FLASH_MODE=dio
+# Saola, WROOM
 
 BUILD_EXTRA_FLAGS := -DBOARD_HAS_PSRAM -DWIFI_PASS='$(WIFI_PASS)' -DWIFI_SSID='$(WIFI_SSID)'
 
-#UPLOAD_PORT?=
+UPLOAD_PORT?=$(shell find /dev -name 'ttyUSB*' 2>&- | sort | tail -n 1)
 #UPLOAD_SPEED
-#MONITOR_SPEED
 USE_CCACHE=1
+
+# DEBUGGING
 #BUILD_THREADS=1
 #NO_USER_OBJ_LIB=1
+CORE_DEBUG_LEVEL=4
+
+
+
+
 
 EOMI_ROOT:=../..
 OBJDIR?=obj
@@ -50,6 +58,7 @@ LIBS := $(ESP32S2JS) \
 	$(JERRY_DIR)/targets/esp-idf/*.c \
 	AsyncTCP \
 	ESPAsyncWebServer \
+	Adafruit_NeoPixel/ \
 
 
 include ./makeEspArduino/makeEspArduino.mk 

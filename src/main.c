@@ -32,7 +32,6 @@ int main(int argc, char ** argv) {
                 responseFromErrorCode(parser, result);
                 // return result;
                 OmiParser_destroy(parser);
-                OmiParser_init(parser, 0);
             case Err_End:
                 printf("\r\n"); // Separator: Easier to pipe the result to other programs
                 fflush(stdout);
