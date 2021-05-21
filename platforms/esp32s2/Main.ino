@@ -3,6 +3,7 @@
 
 
 #include <esp32-hal-psram.h>
+#include <esp32-hal.h>
 #include <Arduino.h>
 #ifdef ESP32
 #include <WiFi.h>
@@ -17,6 +18,15 @@
 #include <ESPAsyncWebServer.h>
 #include <WiFiMulti.h>
 
+#include <buildinfo.h>
+
+// Sensors
+//#include "DFRobot_SHT20.h"
+
+// use ESP32-ESP32S2-AnalogWrite for servo, official AnalogWrite does not exist so normally either ledc or delta sigma needs to be used directly
+#include <analogWrite.h>
+
+
 #include "OMIParser.h"
 #include "requestHandler.h"
 #include "StringStorage.h"
@@ -24,13 +34,13 @@
 #include "utils.h"
 
 #ifndef OUTPUT_BUF_SIZE
-#define OUTPUT_BUF_SIZE 1024
+#define OUTPUT_BUF_SIZE 3000
 #endif
 
 
 // PINS
-#define LED 18 
-
+#define LedPin   18 
+#define ServoPin 17
 
 
 // TODO: Find AsyncWebServer compatible WiFi manager!?
@@ -85,7 +95,7 @@ WiFiMulti wifiMulti;
 AsyncWebServer server(80);
 AsyncWebSocket ws("/");
 
-Adafruit_NeoPixel pixel(1, LED, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel pixel(1, LedPin, NEO_GRB + NEO_KHZ800);
 void error() {
   Serial.println("Fail");
   pixel.setBrightness(20);
@@ -173,7 +183,10 @@ void endWsMessage(int eomiConnId) {
 void destroyConnection(int eomiConnId) {
   if (eomiConnId < 0) return;
   //OmiParser_destroy(wsConnections[eomiConnId].parser);
-  wsConnections[eomiConnId].client = NULL;
+  
+  // This might be needed, trying to stop crashes on disconnect (OMIParser.c:725 -> yxml.c:346)
+  //wsConnections[eomiConnId].client = NULL;
+
   ws.cleanupClients(); // prob. not needed
 }
 
@@ -181,7 +194,6 @@ void handleParsing(OmiParser * parser, char * data) {
   if (!data[0]) return;
   ErrorResponse result = runParser(parser, data);
   Serial.printf("PARSE RESULT %d\n", result);
-  data[0] = 0; // mark as processed
   int id = parser->parameters.connectionId;
   switch (result) {
     case Err_OK: break;
@@ -190,6 +202,7 @@ void handleParsing(OmiParser * parser, char * data) {
     case Err_End:
       endWsMessage(id);
       OmiParser_destroy(parser);
+      data[0] = 0; // mark as processed
       OmiParser_init(parser, id);
       break;
   }
@@ -201,7 +214,7 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
   if(type == WS_EVT_CONNECT){ //client connected
 
     os_printf("ws[%s][%u] connect", server->url(), client->id());
-    client->ping();
+    //client->ping();
     int id = initConnection(client);
     os_printf("Cid:%d\n", id);
     if (id == -1) {
@@ -330,16 +343,7 @@ void setupEOMI() {
     connectionHandler.getPrintfForConnection = getConnectionParserId;
 }
 
-void setupWiFi() {
-    println("WIFI");
-    WiFi.setHostname(hostname);
-    //wifiMulti.addAP(ssid, password);
-    wifiMulti.addAP("***REMOVED***", "***REMOVED***");
-    wifiMulti.addAP("***REMOVED***", "***REMOVED***");
-    //wifiMulti.addAP("***REMOVED***", "***REMOVED***");
-
-    //WiFi.mode(WIFI_STA);
-    //WiFi.begin(ssid, password);
+void connectWiFi(){
     //Serial.print(ssid); Serial.print(" "); Serial.print(password);
     //if (WiFi.waitForConnectResult() != WL_CONNECTED) {
     //  // Had problem with connecting; Double try recommended on forums
@@ -366,6 +370,18 @@ void setupWiFi() {
     println("mDNS");
     if (!MDNS.begin(hostname)) error();
 }
+void setupWiFi() {
+    println("WIFI");
+    WiFi.setHostname(hostname);
+    //wifiMulti.addAP(ssid, password);
+    wifiMulti.addAP("***REMOVED***", "***REMOVED***");
+    wifiMulti.addAP("***REMOVED***", "***REMOVED***");
+    //wifiMulti.addAP("***REMOVED***", "***REMOVED***");
+
+    //WiFi.mode(WIFI_STA);
+    //WiFi.begin(ssid, password);
+    connectWiFi();
+}
 
 void setupServer() {
     // attach AsyncWebSocket
@@ -375,10 +391,6 @@ void setupServer() {
     server.begin();
 }
 
-Ticker cleanupTimer;
-void setupTimers() {
-  cleanupTimer.attach(1, cleanup);
-}
 
 void setupLED() {
   pixel.setBrightness(5); // max 255
@@ -386,26 +398,143 @@ void setupLED() {
   pixel.setPixelColor(0,255,200,0); pixel.show();
 }
 
-void writeInitial() {
+void setupNTP() {
+  //configTime(long gmtOffset_sec, int daylightOffset_sec, const char* server1, const char* server2, const char* server3)
+  configTime(TIMEZONE_SECS, TIMEZONE_DST_SECS, STR(NTP_SERVER0), STR(NTP_SERVER1), STR(NTP_SERVER2));
+}
+
+Path * writeObject(OmiParser * p, OdfTree & odf, const char * strPath) {
+    Path * path = addPath(&odf, strPath, OdfObject);
+    handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
+    return path;
+}
+Path * writeStringItem(OmiParser * p, OdfTree & odf, const char * strPath, const char * value) {
+    Path * path = addPath(&odf, strPath, OdfInfoItem);
+    handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
+    path->flags = V_String;
+    handleWrite(p, path, OdfParserEvent(PE_ValueData, strdup(value)));
+    return path;
+}
+Path * writeIntItem(OmiParser * p, OdfTree & odf, const char * strPath, int value) {
+    Path * path = addPath(&odf, strPath, OdfInfoItem);
+    handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
+    path->flags = V_Int;
+    path->value.i = value;
+    handleWrite(p, path, OdfParserEvent(PE_ValueData,NULL));
+    return path;
+}
+Path * writeFloatItem(OmiParser * p, OdfTree & odf, const char * strPath, float value) {
+    Path * path = addPath(&odf, strPath, OdfInfoItem);
+    handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
+    path->flags = V_Float;
+    path->value.f = value;
+    handleWrite(p, path, OdfParserEvent(PE_ValueData,NULL));
+    return path;
+}
+
+
+ErrorResponse handleRgbLed(OmiParser *p, Path *path, OdfParserEvent event) {
+    (void) event;
+    if (PathGetNodeType(path) != OdfInfoItem) return Err_OK;
+    AnyValue value = path->value.latest->current.value;
+    uint32_t color = 0;
+    switch (path->flags & PF_ValueType) {
+      case V_Int:
+        color = value.i;
+        break;
+      case V_UInt:
+        color = value.l;
+        break;
+      default:
+        return Err_InvalidAttribute;
+    }
+    os_printf("Actuator color %d\n", color);
+    pixel.setBrightness(color >> 24);
+    pixel.setPixelColor(0,color & 0x00FFFFFF);
+    pixel.show();
+    return Err_OK;
+}
+
+bool g_initial=true;
+void writeInternalItems() {
   OmiParser pa;
   OmiParser *p = &pa;
-  OmiParser_init(p, 0);
+  OmiParser_init(p, -1); // negative connectionId prevents subscription responses to handlers
   p->parameters.requestType = OmiWrite;
-
-  Path paths[20]; 
+  const char maxPaths = 30;
+  Path paths[maxPaths]; 
   OdfTree odf;
-  OdfTree_init(&odf, paths, 20);
-  Path * path;
-  path = addPath(&odf, "Objects/Device", OdfObject);
-  handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
-  path = addPath(&odf, "Objects/Device/MCU", OdfInfoItem);
-  handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
-  path->flags = V_String;
-  handleWrite(p, path, OdfParserEvent(PE_ValueData, strdup("ESP32S2")));
+  OdfTree_init(&odf, paths, maxPaths);
+  //Path * path;
+
+  if (g_initial) {
+    g_initial=false;
+    // Objects; NOTE: Each must have its parent defined before
+    writeObject(p, odf, "Objects/Device");
+    writeObject(p, odf, "Objects/Device/Memory");
+    writeObject(p, odf, "Objects/RgbLed");
+
+    // Items
+    writeStringItem(p, odf, "Objects/Device/SoftwareBuildTime", _BuildInfo.time);
+    writeStringItem(p, odf, "Objects/Device/SoftwareBuildDate", _BuildInfo.date);
+    writeStringItem(p, odf, "Objects/Device/SoftwareBuildVersion", _BuildInfo.src_version);
+    writeStringItem(p, odf, "Objects/Device/SoftwareKernelVersion", _BuildInfo.env_version);
+    writeStringItem(p, odf, "Objects/Device/ChipModel", ESP.getChipModel());
+    writeStringItem(p, odf, "Objects/Device/SdkVersion", ESP.getSdkVersion());
+    writeStringItem(p, odf, "Objects/Device/SoftwareHashMD5", ESP.getSketchMD5().c_str());
+
+    // Constant
+    //uint32_t getCpuFreqMHz()
+    writeIntItem(p, odf, "Objects/Device/ChipRevision", ESP.getChipRevision());
+    writeIntItem(p, odf, "Objects/Device/Memory/SoftwareSize", ESP.getSketchSize());
+    writeIntItem(p, odf, "Objects/Device/Memory/SoftwareSizeFree", ESP.getFreeSketchSpace());
+    writeIntItem(p, odf, "Objects/Device/Memory/HeapTotal", ESP.getHeapSize());
+    writeIntItem(p, odf, "Objects/Device/Memory/PSRAMTotal", ESP.getPsramSize());
+
+    // Writable items
+    HandlerInfo * subInfo = (HandlerInfo*) poolAlloc(&HandlerInfoPool);
+    *subInfo = (HandlerInfo){
+        .handlerType = HT_Script, 
+        .handler = handleRgbLed,
+        .another = NULL,
+        .prevOther = NULL,
+        .nextOther = NULL,
+        .callbackInfo = p->parameters, 
+    };
+    Path * path = writeIntItem(p, odf, "Objects/RgbLed/ColorRGB", 0);
+    int resultIndex = -1;
+    if (odfBinarySearch(&tree, path, &resultIndex)) {
+      Path * subscriptionTarget = &tree.sortedPaths[resultIndex];
+      addSubscription(NULL, subscriptionTarget, &subInfo);
+    }
+  }
+
+  // Non-constant variables
+
+  // Memory information
+  //Internal RAM
+  writeIntItem(p, odf, "Objects/Device/Memory/HeapFree", ESP.getFreeHeap());
+  writeIntItem(p, odf, "Objects/Device/Memory/HeapMinFree", ESP.getMinFreeHeap());
+  //largest block of heap that can be allocated at once
+  writeIntItem(p, odf, "Objects/Device/Memory/HeapLargestFreeBlock", ESP.getMaxAllocHeap());
+
+  //SPI RAM
+  writeIntItem(p, odf, "Objects/Device/Memory/PSRAMFree", ESP.getFreePsram());
+  writeIntItem(p, odf, "Objects/Device/Memory/PSRAMMinFree", ESP.getMinFreePsram());
+  //largest block of heap that can be allocated at once
+  writeIntItem(p, odf, "Objects/Device/Memory/PSRAMLargestFreeBlock", ESP.getMaxAllocPsram());
+
+  writeFloatItem(p, odf, "Objects/Device/ChipTemperature", temperatureRead());
 
 
-    // TODO
+  OmiParser_destroy(p);
+}
 
+Ticker cleanupTimer;
+Ticker internalWriteTimer;
+void setupTimers() {
+  cleanupTimer.attach(1, cleanup);
+  internalWriteTimer.attach(60, writeInternalItems);
 }
 
 void setup() {
@@ -416,6 +545,8 @@ void setup() {
 
     setupWiFi();
 
+    setupNTP();
+
     setupPSRAM();
 
     setupEOMI();
@@ -424,7 +555,7 @@ void setup() {
 
     setupTimers();
 
-    writeInitial();
+    writeInternalItems();
 
     pixel.setPixelColor(0, 0,0,255); pixel.show();
     println("BOOT OK");
@@ -438,6 +569,7 @@ void loop() {
       handleParsing(conn.parser, conn.inputBuffer);
     }
   }
+  if (WiFi.status() != WL_CONNECTED) connectWiFi();
 }
 
 

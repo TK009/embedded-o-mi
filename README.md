@@ -73,6 +73,7 @@ Undecided features (should be implemented or not?):
 
 Sorted by about highest to lowest priority:
 
+* Arduino-esp: Change/Modify websocket library to allow message frame streaming (currently the whole message needs to be passed in one chunk)
 * Automatic current connection subscription cancel on connection close
 * Fix script write self path causing incorrect subscription notifications when subscribing after script addition
    - first result is the raw value and second is value modified and written by the script

@@ -8,7 +8,12 @@ ESP_ROOT:=$(HOME)/esp/arduino-esp32
 FLASH_MODE=dio
 # Saola, WROOM
 
-BUILD_EXTRA_FLAGS := -DBOARD_HAS_PSRAM -DWIFI_PASS='$(WIFI_PASS)' -DWIFI_SSID='$(WIFI_SSID)'
+BUILD_EXTRA_FLAGS := \
+	-DWIFI_PASS='$(WIFI_PASS)' -DWIFI_SSID='$(WIFI_SSID)' \
+	-DBOARD_HAS_PSRAM \
+  -DTIMEZONE_SECS=7200 -DTIMEZONE_DST_SECS=3600 \
+	-DNTP_SERVER0="0.fi.pool.ntp.org" -DNTP_SERVER1="1.fi.pool.ntp.org" -DNTP_SERVER2="2.fi.pool.ntp.org" \
+
 
 UPLOAD_PORT?=$(shell find /dev -name 'ttyUSB*' 2>&- | sort | tail -n 1)
 #UPLOAD_SPEED
@@ -59,6 +64,9 @@ LIBS := $(ESP32S2JS) \
 	AsyncTCP \
 	ESPAsyncWebServer \
 	Adafruit_NeoPixel/ \
+	ESP32-ESP32S2-AnalogWrite/ \
+
+	#DFRobot_SHT20 \
 
 
 include ./makeEspArduino/makeEspArduino.mk 

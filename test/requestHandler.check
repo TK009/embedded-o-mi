@@ -462,7 +462,7 @@ int erronousHandler(OmiParser* p, Path * path, OdfParserEvent e) {
     };
     subInfo->callbackInfo.requestType = OmiRead;
     subInfo->callbackInfo.lastPath = NULL;
-    subInfo->callbackInfo.connectionId = 5;
+    subInfo->callbackInfo.connectionId = 3;
     HandlerInfo ** subInfoPtr = &subInfo;
     addSubscription(NULL, path, subInfoPtr);
     //ck_assert_ptr_ne(*subInfoPtr, subInfo);
@@ -501,7 +501,7 @@ int erronousHandler(OmiParser* p, Path * path, OdfParserEvent e) {
     };
     subInfo2->callbackInfo.requestType = OmiRead;
     subInfo2->callbackInfo.lastPath = NULL;
-    subInfo2->callbackInfo.connectionId = 6;
+    subInfo2->callbackInfo.connectionId = 4;
     subInfoPtr = &subInfo2;
     addSubscription(NULL, path, subInfoPtr);
 

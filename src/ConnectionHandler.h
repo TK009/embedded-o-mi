@@ -10,7 +10,7 @@ extern "C" {
 #endif
 
 #ifndef NumConnections
-#define NumConnections 10
+#define NumConnections 6
 #endif
 
 typedef int (*Printf)(const char*, ...);
