@@ -33,25 +33,45 @@
 #include "ScriptEngine.h"
 #include "utils.h"
 
+#define STR(s) #s
+#define XSTR(x) STR(x)
+
 #ifndef OUTPUT_BUF_SIZE
 #define OUTPUT_BUF_SIZE 3000
 #endif
 
+#ifndef SERVO_FREQ
+#define SERVO_FREQ 50 // Hz
+#endif
+#ifndef SERVO_RESOLUTION
+#define SERVO_RESOLUTION 10 // bits
+#endif
+
+#ifndef HOSTNAME
+#define HOSTNAME tk-dippa
+#endif
 
 // PINS
+#ifndef LedPin
 #define LedPin   18 
-#define ServoPin 17
+#endif
+#ifdef ServoPin
+//#define ServoPin 16
+#define Servo 1
+#pragma message "Servo enabled on pin " XSTR(ServoPin) " "
+#endif
 
 
 // TODO: Find AsyncWebServer compatible WiFi manager!?
-#define STR(s) #s
 const char* ssid = STR(WIFI_SSID);
 const char* password = STR(WIFI_PASS);
-const char* hostname = "tk-dippa";
-#define XSTR(x) STR(x)
-#pragma message "SSID is " XSTR(WIFI_SSID)
-#pragma message "Pass is " XSTR(WIFI_PASS)
+const char* hostname = STR(HOSTNAME);
+#pragma message "WIFI_SSID is " XSTR(WIFI_SSID) " "
+#pragma message "WIFI_PASS is " XSTR(WIFI_PASS) " "
+#pragma message "HOSTNAME is ws://" XSTR(HOSTNAME) ".local"
 
+#define println(...) Serial.println(__VA_ARGS__); Serial.flush()
+#define os_printf(...) Serial.printf(__VA_ARGS__); Serial.flush()
 
 //External RAM use has the following restrictions:
 //
@@ -97,7 +117,7 @@ AsyncWebSocket ws("/");
 
 Adafruit_NeoPixel pixel(1, LedPin, NEO_GRB + NEO_KHZ800);
 void error() {
-  Serial.println("Fail");
+  println("Fail");
   pixel.setBrightness(20);
   pixel.setPixelColor(0, 255,0,0);
   pixel.show();
@@ -139,12 +159,17 @@ int initConnection(AsyncWebSocketClient * client){
   for (int i = 0; i < NumConnections; ++i) {
     auto & conn = wsConnections[i];
     if ((conn.client == NULL || conn.client->status() == WS_DISCONNECTED) && conn.inputBuffer[0] == 0) {
+      conn.parser = getParser(i);
+      if (conn.parser == NULL) {
+        println("No parsers left!");
+        return -1;
+      }
       conn.client = client;
       //conn.outputBuffer = new AsyncWebSocketMessageBuffer(OUTPUT_BUF_SIZE);
       conn.outputBuffer[0] = 0;
       conn.inputBuffer[0] = 0;
       conn.outputSize = 0;
-      conn.parser = getParser(i);
+      //OmiParser_init(conn.parser);
       return i;
     }
   }
@@ -182,10 +207,11 @@ void endWsMessage(int eomiConnId) {
 }
 void destroyConnection(int eomiConnId) {
   if (eomiConnId < 0) return;
-  //OmiParser_destroy(wsConnections[eomiConnId].parser);
+  if (wsConnections[eomiConnId].inputBuffer[0] == 0)
+    OmiParser_destroy(wsConnections[eomiConnId].parser);
   
   // This might be needed, trying to stop crashes on disconnect (OMIParser.c:725 -> yxml.c:346)
-  //wsConnections[eomiConnId].client = NULL;
+  wsConnections[eomiConnId].client = NULL;
 
   ws.cleanupClients(); // prob. not needed
 }
@@ -208,24 +234,24 @@ void handleParsing(OmiParser * parser, char * data) {
   }
 }
 
-#define println(...) Serial.println(__VA_ARGS__); Serial.flush()
-#define os_printf(...) Serial.printf(__VA_ARGS__); Serial.flush()
 void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
   if(type == WS_EVT_CONNECT){ //client connected
 
-    os_printf("ws[%s][%u] connect", server->url(), client->id());
+    os_printf("ws[%s][%u] connect ", server->url(), client->id());
     //client->ping();
     int id = initConnection(client);
     os_printf("Cid:%d\n", id);
     if (id == -1) {
       os_printf("initConnection error!\n");
+      ws.pingAll(); // try to catch broken connections faster
       return;
     }
 
   } else if(type == WS_EVT_DISCONNECT){ //client disconnected
 
-    os_printf("ws[%s][%u] disconnect: %u\n", server->url(), client->id());
-    destroyConnection(getParserIdFromWsId(client->id()));
+    int id = getParserIdFromWsId(client->id());
+    os_printf("ws[%s][%u] disconnect: %d\n", server->url(), client->id(), id);
+    destroyConnection(id);
 
   } else if(type == WS_EVT_ERROR){ //error was received from the other end
 
@@ -354,8 +380,8 @@ void connectWiFi(){
     //  }
     //  if (WiFi.status() != WL_CONNECTED) error();
     //}
-    for (int i = 0; wifiMulti.run(8000) != WL_CONNECTED && i < 5; ++i) {
-      delay(1000);
+    for (int i = 0; wifiMulti.run(8000) != WL_CONNECTED && i < 4; ++i) {
+      delay(2000);
       Serial.print(".");
     }
     if (WiFi.status() != WL_CONNECTED) {
@@ -433,6 +459,24 @@ Path * writeFloatItem(OmiParser * p, OdfTree & odf, const char * strPath, float 
 }
 
 
+void addInternalSubscription(OmiParser *p, Path * path, OdfPathCallback handler) {
+    HandlerInfo * subInfo = (HandlerInfo*) poolAlloc(&HandlerInfoPool);
+    *subInfo = (HandlerInfo){
+        .handlerType = HT_Script, 
+        .handler = handler,
+        .another = NULL,
+        .prevOther = NULL,
+        .nextOther = NULL,
+        .callbackInfo = p->parameters, 
+    };
+    subInfo->callbackInfo.connectionId = -1; // do not try to send sub responses
+    int resultIndex = -1;
+    if (odfBinarySearch(&tree, path, &resultIndex)) {
+      Path * subscriptionTarget = &tree.sortedPaths[resultIndex];
+      addSubscription(NULL, subscriptionTarget, &subInfo);
+    }
+}
+
 ErrorResponse handleRgbLed(OmiParser *p, Path *path, OdfParserEvent event) {
     (void) event;
     if (PathGetNodeType(path) != OdfInfoItem) return Err_OK;
@@ -448,12 +492,51 @@ ErrorResponse handleRgbLed(OmiParser *p, Path *path, OdfParserEvent event) {
       default:
         return Err_InvalidAttribute;
     }
-    os_printf("Actuator color %d\n", color);
+    os_printf("Actuator Color %d\n", color);
     pixel.setBrightness(color >> 24);
     pixel.setPixelColor(0,color & 0x00FFFFFF);
     pixel.show();
     return Err_OK;
 }
+
+#ifdef Servo
+Ticker servoPowersaveTimer;
+void servoPowerOff(){
+  analogWrite(ServoPin, 0);
+}
+ErrorResponse handleServo(OmiParser *p, Path *path, OdfParserEvent event) {
+    (void) event;
+    if (PathGetNodeType(path) != OdfInfoItem) return Err_OK;
+    AnyValue value = path->value.latest->current.value;
+
+    float angle;
+    switch (path->flags & PF_ValueType) {
+      case V_Int:
+      case V_UInt:
+        angle = value.l; break;
+      case V_Double:
+        angle = value.d; break;
+      case V_Float:
+        angle = value.f; break;
+      default:
+        return Err_InvalidAttribute;
+    }
+    servoPowersaveTimer.detach();
+    os_printf("Actuator Servo angle %f ", angle);
+
+    constexpr float in_min=0;
+    constexpr float in_max=180;
+    constexpr float out_min=(1.0/20.0 * (1<<(SERVO_RESOLUTION)));
+    constexpr float out_max=(2.0/20.0 * (1<<(SERVO_RESOLUTION)));
+    int32_t pwm = constrain((angle - in_min) * (out_max - out_min) / (in_max - in_min) + out_min,
+        out_min, out_max);
+    os_printf("pwm %d / %f \n", pwm, out_max);
+    analogWrite(ServoPin, pwm, SERVO_FREQ, SERVO_RESOLUTION);
+    servoPowersaveTimer.once(3, servoPowerOff);
+    return Err_OK;
+}
+#endif
+
 
 bool g_initial=true;
 void writeInternalItems() {
@@ -461,7 +544,7 @@ void writeInternalItems() {
   OmiParser *p = &pa;
   OmiParser_init(p, -1); // negative connectionId prevents subscription responses to handlers
   p->parameters.requestType = OmiWrite;
-  const char maxPaths = 30;
+  const char maxPaths = 40;
   Path paths[maxPaths]; 
   OdfTree odf;
   OdfTree_init(&odf, paths, maxPaths);
@@ -473,6 +556,7 @@ void writeInternalItems() {
     writeObject(p, odf, "Objects/Device");
     writeObject(p, odf, "Objects/Device/Memory");
     writeObject(p, odf, "Objects/RgbLed");
+    writeObject(p, odf, "Objects/Switch");
 
     // Items
     writeStringItem(p, odf, "Objects/Device/SoftwareBuildTime", _BuildInfo.time);
@@ -492,21 +576,14 @@ void writeInternalItems() {
     writeIntItem(p, odf, "Objects/Device/Memory/PSRAMTotal", ESP.getPsramSize());
 
     // Writable items
-    HandlerInfo * subInfo = (HandlerInfo*) poolAlloc(&HandlerInfoPool);
-    *subInfo = (HandlerInfo){
-        .handlerType = HT_Script, 
-        .handler = handleRgbLed,
-        .another = NULL,
-        .prevOther = NULL,
-        .nextOther = NULL,
-        .callbackInfo = p->parameters, 
-    };
-    Path * path = writeIntItem(p, odf, "Objects/RgbLed/ColorRGB", 0);
-    int resultIndex = -1;
-    if (odfBinarySearch(&tree, path, &resultIndex)) {
-      Path * subscriptionTarget = &tree.sortedPaths[resultIndex];
-      addSubscription(NULL, subscriptionTarget, &subInfo);
-    }
+    Path * path;
+    path = writeIntItem(p, odf, "Objects/RgbLed/ColorRGB", 0);
+    addInternalSubscription(p, path, handleRgbLed);
+
+#ifdef Servo
+    path = writeFloatItem(p, odf, "Objects/Switch/ServoDegrees", 0);
+    addInternalSubscription(p, path, handleServo);
+#endif
   }
 
   // Non-constant variables
@@ -567,6 +644,9 @@ void loop() {
     if (conn.inputBuffer[0] != '\0') {
       os_printf("PARSE %s\n", conn.inputBuffer);
       handleParsing(conn.parser, conn.inputBuffer);
+      if (conn.client && conn.client->status() != WS_CONNECTED) {
+        OmiParser_destroy(conn.parser);
+      }
     }
   }
   if (WiFi.status() != WL_CONNECTED) connectWiFi();

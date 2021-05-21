@@ -13,6 +13,7 @@ BUILD_EXTRA_FLAGS := \
 	-DBOARD_HAS_PSRAM \
   -DTIMEZONE_SECS=7200 -DTIMEZONE_DST_SECS=3600 \
 	-DNTP_SERVER0="0.fi.pool.ntp.org" -DNTP_SERVER1="1.fi.pool.ntp.org" -DNTP_SERVER2="2.fi.pool.ntp.org" \
+	-DServoPin=16
 
 
 UPLOAD_PORT?=$(shell find /dev -name 'ttyUSB*' 2>&- | sort | tail -n 1)

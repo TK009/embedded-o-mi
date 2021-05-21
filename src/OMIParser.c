@@ -93,6 +93,7 @@ Path* OmiParser_popPath(OmiParser* p){
 void OmiParser_destroy(OmiParser* p){
     while (OmiParser_popPath(p)) {};
     if (p->parameters.callbackAddr) free(p->parameters.callbackAddr);
+    p->st = OmiState_Ready;
 }
 
 #define elementEquals(tag) (strcmp(p->xmlSt.elem, s_ ## tag) == 0)
