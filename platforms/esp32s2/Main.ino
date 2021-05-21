@@ -23,8 +23,6 @@
 // Sensors
 //#include "DFRobot_SHT20.h"
 
-// use ESP32-ESP32S2-AnalogWrite for servo, official AnalogWrite does not exist so normally either ledc or delta sigma needs to be used directly
-#include <analogWrite.h>
 
 
 #include "OMIParser.h"
@@ -44,7 +42,7 @@
 #define SERVO_FREQ 50 // Hz
 #endif
 #ifndef SERVO_RESOLUTION
-#define SERVO_RESOLUTION 10 // bits
+#define SERVO_RESOLUTION 12 // bits
 #endif
 
 #ifndef HOSTNAME
@@ -56,11 +54,22 @@
 #define LedPin   18 
 #endif
 #ifdef ServoPin
+// use ESP32-ESP32S2-AnalogWrite for servo, official AnalogWrite does not exist so normally either ledc or delta sigma needs to be used directly
+#include <analogWrite.h>
 //#define ServoPin 16
-#define Servo 1
+#define ServoEnable 1
 #pragma message "Servo enabled on pin " XSTR(ServoPin) " "
 #endif
 
+#ifdef DhtPin
+#define DhtEnable 1
+//#include <Adafruit_Sensor.h>
+//#include <DHT_U.h>
+#include <DHT.h>
+#define DHTTYPE DHT11
+DHT dht(DhtPin, DHTTYPE);
+#pragma message "DHT11 enabled on pin " XSTR(DhtPin) " "
+#endif
 
 // TODO: Find AsyncWebServer compatible WiFi manager!?
 const char* ssid = STR(WIFI_SSID);
@@ -180,10 +189,17 @@ int initConnection(AsyncWebSocketClient * client){
 Printf getConnectionParserId(int eomiConnId) {
   if (eomiConnId < 0) return noConnection;
   currentConn = &wsConnections[eomiConnId];
-  if (currentConn->client && currentConn->client->status() != WS_CONNECTED)
+  if (currentConn->client || currentConn->client->status() != WS_CONNECTED)
     return noConnection;
   return printfBuffer;
 }
+
+// TODO use Links ws client
+//int openConnection(const char * url) {
+//  AsyncWebSocketClient * client;
+//}
+
+
 int getParserIdFromWsId(int wsId) {
   for (int i = 0; i < NumConnections; ++i) {
     auto & conn = wsConnections[i];
@@ -412,7 +428,19 @@ void setupWiFi() {
 void setupServer() {
     // attach AsyncWebSocket
     ws.onEvent(onEvent);
+
     server.addHandler(&ws);
+
+    // CORS
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+    server.onNotFound([](AsyncWebServerRequest *request) {
+      if (request->method() == HTTP_OPTIONS) {
+        request->send(200);
+      } else {
+        request->send(404);
+      }
+    });
+
 
     server.begin();
 }
@@ -423,10 +451,20 @@ void setupLED() {
   pixel.begin();
   pixel.setPixelColor(0,255,200,0); pixel.show();
 }
+void printLocalTime()
+{
+  struct tm timeinfo;
+  if(!getLocalTime(&timeinfo)){
+    println("Failed to obtain time");
+    return;
+  }
+  println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+}
 
 void setupNTP() {
   //configTime(long gmtOffset_sec, int daylightOffset_sec, const char* server1, const char* server2, const char* server3)
-  configTime(TIMEZONE_SECS, TIMEZONE_DST_SECS, STR(NTP_SERVER0), STR(NTP_SERVER1), STR(NTP_SERVER2));
+  configTime(TIMEZONE_SECS, TIMEZONE_DST_SECS, STR(NTP_SERVER0));//, STR(NTP_SERVER1), STR(NTP_SERVER2));
+  printLocalTime();
 }
 
 Path * writeObject(OmiParser * p, OdfTree & odf, const char * strPath) {
@@ -499,7 +537,7 @@ ErrorResponse handleRgbLed(OmiParser *p, Path *path, OdfParserEvent event) {
     return Err_OK;
 }
 
-#ifdef Servo
+#ifdef ServoEnable
 Ticker servoPowersaveTimer;
 void servoPowerOff(){
   analogWrite(ServoPin, 0);
@@ -526,8 +564,8 @@ ErrorResponse handleServo(OmiParser *p, Path *path, OdfParserEvent event) {
 
     constexpr float in_min=0;
     constexpr float in_max=180;
-    constexpr float out_min=(1.0/20.0 * (1<<(SERVO_RESOLUTION)));
-    constexpr float out_max=(2.0/20.0 * (1<<(SERVO_RESOLUTION)));
+    constexpr float out_min=(0.9/20.0 * (1<<(SERVO_RESOLUTION)));
+    constexpr float out_max=(2.1/20.0 * (1<<(SERVO_RESOLUTION)));
     int32_t pwm = constrain((angle - in_min) * (out_max - out_min) / (in_max - in_min) + out_min,
         out_min, out_max);
     os_printf("pwm %d / %f \n", pwm, out_max);
@@ -537,9 +575,44 @@ ErrorResponse handleServo(OmiParser *p, Path *path, OdfParserEvent event) {
 }
 #endif
 
+#ifdef DhtEnable
+//Path dhtParent; // an idea to reduce path constructing
+//Path dhtTempPath;
+//Path dhtHumiPath;
+float dhtTemp = 0;
+float dhtHumi = 0;
+
+void readDht(OmiParser * p, OdfTree & odf) {
+  writeObject(p, odf, "Objects/Dht11");
+  float newTemp = dht.readTemperature();
+  if (isnan(newTemp)) {
+    Serial.print(F("Error reading temperature! "));
+  } else {
+    Serial.print(F("Temperature: ")); Serial.print(newTemp); Serial.print("°C ");
+    dhtTemp = dhtTemp * 0.5 + newTemp * 0.5;
+    writeFloatItem(p, odf, "Objects/Dht11/Temperature", dhtTemp);
+  }
+
+  float newHumi = dht.readHumidity();
+  if (isnan(newHumi)) {
+    println(F("Error reading humidity!"));
+  } else {
+    Serial.print(F("Humidity: ")); Serial.print(newHumi); println("%");
+    dhtHumi = dhtHumi * 0.5 + newHumi * 0.5;
+    writeFloatItem(p, odf, "Objects/Dht11/RelativeHumidity", dhtHumi);
+  }
+}
+#endif
+
 
 bool g_initial=true;
+int counter = 6;
 void writeInternalItems() {
+  bool quick = true;
+  if (counter++ >= 6) {
+    counter = 0;
+    quick = false;
+  }
   OmiParser pa;
   OmiParser *p = &pa;
   OmiParser_init(p, -1); // negative connectionId prevents subscription responses to handlers
@@ -552,11 +625,10 @@ void writeInternalItems() {
 
   if (g_initial) {
     g_initial=false;
+
+
     // Objects; NOTE: Each must have its parent defined before
     writeObject(p, odf, "Objects/Device");
-    writeObject(p, odf, "Objects/Device/Memory");
-    writeObject(p, odf, "Objects/RgbLed");
-    writeObject(p, odf, "Objects/Switch");
 
     // Items
     writeStringItem(p, odf, "Objects/Device/SoftwareBuildTime", _BuildInfo.time);
@@ -570,39 +642,57 @@ void writeInternalItems() {
     // Constant
     //uint32_t getCpuFreqMHz()
     writeIntItem(p, odf, "Objects/Device/ChipRevision", ESP.getChipRevision());
+    writeObject(p, odf, "Objects/Device/Memory");
     writeIntItem(p, odf, "Objects/Device/Memory/SoftwareSize", ESP.getSketchSize());
     writeIntItem(p, odf, "Objects/Device/Memory/SoftwareSizeFree", ESP.getFreeSketchSpace());
     writeIntItem(p, odf, "Objects/Device/Memory/HeapTotal", ESP.getHeapSize());
     writeIntItem(p, odf, "Objects/Device/Memory/PSRAMTotal", ESP.getPsramSize());
 
     // Writable items
+    writeObject(p, odf, "Objects/RgbLed");
     Path * path;
     path = writeIntItem(p, odf, "Objects/RgbLed/ColorRGB", 0);
     addInternalSubscription(p, path, handleRgbLed);
 
-#ifdef Servo
-    path = writeFloatItem(p, odf, "Objects/Switch/ServoDegrees", 0);
+#ifdef ServoEnable
+    writeObject(p, odf, "Objects/Servo");
+    path = writeFloatItem(p, odf, "Objects/Servo/SetDegrees", 0);
     addInternalSubscription(p, path, handleServo);
+    // TODO: items to modify the max and min
+#endif
+
+#ifdef DhtEnable
+    dht.begin();
+    dhtTemp = dht.readTemperature();
+    dhtHumi = dht.readHumidity();
 #endif
   }
 
   // Non-constant variables
 
-  // Memory information
-  //Internal RAM
-  writeIntItem(p, odf, "Objects/Device/Memory/HeapFree", ESP.getFreeHeap());
-  writeIntItem(p, odf, "Objects/Device/Memory/HeapMinFree", ESP.getMinFreeHeap());
-  //largest block of heap that can be allocated at once
-  writeIntItem(p, odf, "Objects/Device/Memory/HeapLargestFreeBlock", ESP.getMaxAllocHeap());
+#ifdef DhtEnable
+  readDht(p, odf);
+#endif
+  if (!quick) {
+    // Memory information
+    //Internal RAM
+    writeObject(p, odf, "Objects/Device/Memory");
+    writeIntItem(p, odf, "Objects/Device/Memory/HeapFree", ESP.getFreeHeap());
+    writeIntItem(p, odf, "Objects/Device/Memory/HeapMinFree", ESP.getMinFreeHeap());
+    //largest block of heap that can be allocated at once
+    writeIntItem(p, odf, "Objects/Device/Memory/HeapLargestFreeBlock", ESP.getMaxAllocHeap());
 
-  //SPI RAM
-  writeIntItem(p, odf, "Objects/Device/Memory/PSRAMFree", ESP.getFreePsram());
-  writeIntItem(p, odf, "Objects/Device/Memory/PSRAMMinFree", ESP.getMinFreePsram());
-  //largest block of heap that can be allocated at once
-  writeIntItem(p, odf, "Objects/Device/Memory/PSRAMLargestFreeBlock", ESP.getMaxAllocPsram());
+    //SPI RAM
+    writeIntItem(p, odf, "Objects/Device/Memory/PSRAMFree", ESP.getFreePsram());
+    writeIntItem(p, odf, "Objects/Device/Memory/PSRAMMinFree", ESP.getMinFreePsram());
+    //largest block of heap that can be allocated at once
+    writeIntItem(p, odf, "Objects/Device/Memory/PSRAMLargestFreeBlock", ESP.getMaxAllocPsram());
 
+  }
   writeFloatItem(p, odf, "Objects/Device/ChipTemperature", temperatureRead());
 
+  // End any subscription responses
+  handleWrite(p, NULL, OdfParserEvent(PE_RequestEnd, NULL));
 
   OmiParser_destroy(p);
 }
@@ -611,7 +701,7 @@ Ticker cleanupTimer;
 Ticker internalWriteTimer;
 void setupTimers() {
   cleanupTimer.attach(1, cleanup);
-  internalWriteTimer.attach(60, writeInternalItems);
+  internalWriteTimer.attach(10, writeInternalItems);
 }
 
 void setup() {

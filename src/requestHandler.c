@@ -89,6 +89,7 @@ ErrorResponse handleScript(OmiParser *p, Path *path, OdfParserEvent event) {
     return Err_OK; // Internal error ?
 }
 
+// Must call with path that has external parent (not in `tree` variable)
 ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
     Path* storedPathSegment = NULL;
     int resultIndex;
@@ -291,13 +292,21 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                         OdfParserEvent readEvent = OdfParserEvent(PE_Path, NULL);
                         if (!p->parameters.lastPath) {
                             // TODO: Open/find connection here
-                            // connectionId = requestHandler.connectionFor(p->parameters.callbackAddr);
-                            // cancel sub if not successful
-                            // handleCancel()
-
-                            if (p->parameters.callbackAddr && p->parameters.callbackAddr[0] == '0' && p->parameters.connectionId >= 0){ // skip on internal callbacks
-                                connectionHandler.connections[p->parameters.connectionId].responsibleHandler = handler;
-                                p->callbackOpenFlag |= 1 << p->parameters.connectionId;
+                            if (p->parameters.callbackAddr) {
+                                if (p->parameters.callbackAddr[0] == '0') {
+                                // FIXME: cancel sub if not successful, now we trust that user cancels or device reboots
+                                //if (p->parameters.callbackAddr[0] == '0' && connectionHandlerIsClosed)
+                                    // handleCancel()
+                                } else if (connectionHandler.connectionFor) {
+                                    // we have a real callback url
+                                    p->parameters.connectionId = connectionHandler.connectionFor(p->parameters.callbackAddr);
+                                } else {
+                                    p->parameters.connectionId = -3;
+                                }
+                                if (p->parameters.connectionId >= 0){ // skip on internal callbacks
+                                    connectionHandler.connections[p->parameters.connectionId].responsibleHandler = handler;
+                                    p->callbackOpenFlag |= 1 << p->parameters.connectionId;
+                                }
                             }
 
                             for (Path * pathToOpen = p->pathStack; pathToOpen < p->currentOdfPath; ++pathToOpen){
@@ -531,7 +540,10 @@ ErrorResponse handleRequestPath(OmiParser *p, Path *path, OdfParserEvent event) 
         case OmiWrite: case OmiResponse:
             return handleWrite(p, path, event);
         case OmiRead:
+        case OmiSubscribe:
             return handleRead(p, path, event);
+        case OmiCancel:
+            return handleCancel(p, path, event);
         default:
             if (event.data) p->stringAllocator->free(event.data);
             return Err_NotImplemented;

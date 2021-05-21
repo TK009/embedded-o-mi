@@ -2,7 +2,7 @@
 #include "OmiConstants.h"
 #include <stdio.h>
 
-ConnectionHandler connectionHandler = {NULL, "", {0}};
+ConnectionHandler connectionHandler = {NULL, NULL, "", {0}};
 
 const char* omiVersionStr(OmiVersion v) {
     switch (v) {

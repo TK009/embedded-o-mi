@@ -24,6 +24,7 @@ typedef struct ConnectionState {
 
 typedef struct ConnectionHandler {
     Printf (*getPrintfForConnection)(int);
+    int (*connectionFor)(const char *);
     //size_t stringBufferLen;
     char stringBuffer[26];
     ConnectionState connections[NumConnections];
