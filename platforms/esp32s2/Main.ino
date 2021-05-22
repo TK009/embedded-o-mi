@@ -1,6 +1,10 @@
 // vim: set syntax=cpp:
 
 
+#ifndef OUTPUT_BUF_SIZE
+#define OUTPUT_BUF_SIZE 3500
+#define ParserSinglePassLength OUTPUT_BUF_SIZE
+#endif
 
 #include <esp32-hal-psram.h>
 #include <esp32-hal.h>
@@ -36,9 +40,6 @@
 #define STR(s) #s
 #define XSTR(x) STR(x)
 
-#ifndef OUTPUT_BUF_SIZE
-#define OUTPUT_BUF_SIZE 3000
-#endif
 
 #ifndef SERVO_FREQ
 #define SERVO_FREQ 50 // Hz
@@ -147,6 +148,7 @@ typedef struct ConnectionData {
   enum clientType {CT_AsyncServerClient, CT_StandaloneClient};
   AsyncWebSocketClient * client;
   int outputSize;
+  int inputSize;
   OmiParser * parser;
   char inputBuffer[OUTPUT_BUF_SIZE];
   char outputBuffer[OUTPUT_BUF_SIZE];
@@ -181,6 +183,7 @@ int initConnection(AsyncWebSocketClient * client){
       conn.outputBuffer[0] = 0;
       conn.inputBuffer[0] = 0;
       conn.outputSize = 0;
+      conn.inputSize = 0;
       //OmiParser_init(conn.parser);
       return i;
     }
@@ -275,7 +278,7 @@ void destroyConnection(int eomiConnId) {
 void handleParsing(OmiParser * parser, char * data) {
   if (!data[0]) return;
   ErrorResponse result = runParser(parser, data);
-  Serial.printf("CID: %d PARSE RESULT %d CallbackAddr:%s \n", parser->parameters.connectionId, result, parser->parameters.callbackAddr);
+  Serial.printf("CID: %d PARSE RESULT %d \n", parser->parameters.connectionId, result);
   int id = parser->parameters.connectionId;
   switch (result) {
     case Err_OK: break;
@@ -327,24 +330,27 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
     }
     if (len+1 > OUTPUT_BUF_SIZE) error();
 
+    int id = getParserIdFromWsId(client->id());
+    if (id == -1) {
+      os_printf("id error!\n");
+      return;
+    }
+    auto & conn = wsConnections[id];
+
     if(info->final && info->index == 0 && info->len == len){
       //the whole message is in a single frame and we got all of it's data
       os_printf("ws[%s][%u] %s-message[%llu]: ", server->url(), client->id(), (info->opcode == WS_TEXT)?"text":"binary", info->len);
 
       if(info->opcode == WS_TEXT){
         //os_printf("%s\n", (char*)data);
-        int id = getParserIdFromWsId(client->id());
-        if (id == -1) {
-          os_printf("id error!\n");
-          return;
-        }
-        char * buffer = wsConnections[id].inputBuffer;
+        char * buffer = conn.inputBuffer;
         if (buffer[0] != '\0') {
           os_printf("unhandled data Cid:%d\n", id);
           return;
         }
         memcpy(buffer, data, len);
         buffer[len] = 0;
+        conn.inputSize = len;
         os_printf("data copied Cid:%d\n", id);
         //OmiParser * parser = wsConnections[id].parser;
         //handleParsing(parser, data);
@@ -361,23 +367,18 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
       os_printf("ws[%s][%u] frame[%u] %s[%llu - %llu]: ", server->url(), client->id(), info->num, (info->message_opcode == WS_TEXT)?"text":"binary", info->index, info->index + len);
       int id = -1;
       if(info->message_opcode == WS_TEXT){
-        //os_printf("%s\n", (char*)data);
-        //if (info->index == 0 && info->num == 0) {
-        //  id = initConnection(client);
-        //} else {
-        id = getParserIdFromWsId(client->id());
-        //}
-        if (id == -1) {
-          os_printf("id error!\n");
-          return;
-        }
-        char * buffer = wsConnections[id].inputBuffer;
+        char * buffer = conn.inputBuffer;
         if (buffer[0] != '\0') {
-          os_printf("unhandled data Cid:%d\n", id);
-          return;
+          if (conn.inputSize + len < OUTPUT_BUF_SIZE ) {
+            buffer += conn.inputSize;
+          }else {
+            os_printf("unhandled data Cid:%d\n", id);
+            return;
+          }
         }
         memcpy(buffer, data, len);
         buffer[len] = 0;
+        conn.inputSize += len;
         os_printf("data copied Cid:%d\n", id);
         //OmiParser * parser = wsConnections[id].parser;
         //handleParsing(parser, data);
@@ -678,14 +679,14 @@ void writeInternalItems() {
     writeStringItem(p, "SoftwareKernelVersion", _BuildInfo.env_version);
     writeStringItem(p, "ChipModel", ESP.getChipModel());
     writeStringItem(p, "SdkVersion", ESP.getSdkVersion());
-    writeStringItem(p, "SoftwareHashMD5", ESP.getSketchMD5().c_str());
+    //TODO: writeStringItem(p, "SoftwareHashMD5", ESP.getSketchMD5().c_str());
 
     // Constant
     //uint32_t getCpuFreqMHz()
     writeIntItem(p, "ChipRevision", ESP.getChipRevision());
     OmiParser_pushPath(p, "Memory", OdfObject);
-    writeIntItem(p, "SoftwareSize", ESP.getSketchSize());
-    writeIntItem(p, "SoftwareSizeFree", ESP.getFreeSketchSpace());
+    //TODO: writeIntItem(p, "SoftwareSize", ESP.getSketchSize());
+    //TODO: writeIntItem(p, "SoftwareSizeFree", ESP.getFreeSketchSpace());
     writeIntItem(p, "HeapTotal", ESP.getHeapSize());
     writeIntItem(p, "PSRAMTotal", ESP.getPsramSize());
     OmiParser_popPath(p); // Memory

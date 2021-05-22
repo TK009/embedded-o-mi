@@ -18,7 +18,7 @@ struct RequestHandler {
     ResponseCallback respond;
 };
 
-CreateStaticMemoryPool(HandlerInfo, HandlerInfoPool, 4)
+CreateStaticMemoryPool(HandlerInfo, HandlerInfoPool, 5)
 
 // FIXME: better allocator selection
 void LatestValue_destroy(Path * path) {

@@ -6,25 +6,45 @@
       <msg>
         <Objects xmlns="http://www.opengroup.org/xsd/odf/1.0/" version="1.0">
           <Object>
+            <id>Dht11</id>
+            <InfoItem name="Humidity">
+              <MetaData>
+                <InfoItem name="onwrite">
+                  <value unixTime="1621611193">
+if (typeof triggered !== "undefined") triggered = false;
+if (event.value &gt; 60 &amp;&amp; !triggered) {
+  triggered = true;
+  odf.writeItem(true, "Objects/Servo/Switch");
+}
+if (event.value &lt; 40 &amp;&amp; triggered) {
+  triggered = false;
+  odf.writeItem(false, "Objects/Servo/Switch");
+}
+                  </value>
+                </InfoItem>
+              </MetaData>
+            </InfoItem>
+          </Object>
+          <Object>
             <id>Servo</id>
             <InfoItem name="Switch">
               <MetaData>
                 <InfoItem name="onwrite">
                   <value unixTime="1621611193">
-                    //var sleep = function (milliseconds) {
-                    //  const date = Date.now();
-                    //  let currentDate = null;
-                    //  do {
-                    //    currentDate = Date.now();
-                    //  } while (currentDate - date &lt; milliseconds);
-                    //};
-                    odf.writeItem(0, "Objects/Servo/SetDegrees");
-                    //sleep(2000);
-                    odf.writeItem(180, "Objects/Servo/SetDegrees");
+var sleep = function (milliseconds) {
+  const date = Date.now();
+  let curDate = null;
+  do {
+    curtDate = Date.now();
+  } while (curtDate - date &lt; milliseconds);
+};
+odf.writeItem(0, "Objects/Servo/SetDegrees");
+sleep(2000);
+odf.writeItem(180, "Objects/Servo/SetDegrees");
                   </value>
                 </InfoItem>
               </MetaData>
-              <value unixTime="1621611192" type="xs:boolean">false</value>
+              <value unixTime="1" type="xs:boolean">false</value>
             </InfoItem>
           </Object>
         </Objects>
