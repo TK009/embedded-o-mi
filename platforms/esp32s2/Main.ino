@@ -72,9 +72,9 @@ DHT dht(DhtPin, DHTTYPE);
 #endif
 
 // TODO: Find AsyncWebServer compatible WiFi manager!?
-const char* ssid = STR(WIFI_SSID);
-const char* password = STR(WIFI_PASS);
-const char* hostname = STR(HOSTNAME);
+const char* ssid = XSTR(WIFI_SSID);
+const char* password = XSTR(WIFI_PASS);
+const char* hostname = XSTR(HOSTNAME);
 #pragma message "WIFI_SSID is " XSTR(WIFI_SSID) " "
 #pragma message "WIFI_PASS is " XSTR(WIFI_PASS) " "
 #pragma message "HOSTNAME is ws://" XSTR(HOSTNAME) ".local"
@@ -189,7 +189,7 @@ int initConnection(AsyncWebSocketClient * client){
 Printf getConnectionParserId(int eomiConnId) {
   if (eomiConnId < 0) return noConnection;
   currentConn = &wsConnections[eomiConnId];
-  if (currentConn->client || currentConn->client->status() != WS_CONNECTED)
+  if (currentConn->client == NULL || currentConn->client->status() != WS_CONNECTED)
     return noConnection;
   return printfBuffer;
 }
