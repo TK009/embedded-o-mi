@@ -238,7 +238,7 @@ info:
 $(NATIVEJS): | $(LIBDIR)
 	@echo
 	@echo MAKE JERRY SCRIPT
-	@cd jerryscript; $(PY3) tools/build.py --clean --debug --lto=OFF --strip=OFF --profile minimal --jerry-cmdline=OFF --external-context=ON
+	@cd jerryscript; $(PY3) tools/build.py --clean --debug --lto=OFF --strip=OFF --profile $(abspath platforms/esp32s2/jerryscript.profile) --jerry-cmdline=OFF --external-context=ON --error-messages=ON --line-info=ON
 	@cp jerryscript/build/lib/* $(LIBDIR)/
 # parallel build fix (the first depends on the second)
 $(word 1,$(NATIVEJS)): $(word 2,$(NATIVEJS))

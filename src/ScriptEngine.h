@@ -19,7 +19,7 @@ extern "C" {
 extern Allocator ScriptEngineAllocator;
 int ScriptEngine_init();
 void ScriptEngine_destroy();
-int ScriptEngine_testParse(const HString * script);
+int ScriptEngine_testParse(OmiParser * p, const HString* script);
 int ScriptEngine_run(OmiParser * p, Path * path, const HString * script);
 
 

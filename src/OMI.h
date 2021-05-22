@@ -46,7 +46,7 @@ typedef struct OmiRequestParameters {
     float interval;
     char* callbackAddr;
     int connectionId; // Opened connection for either immediate response or callback
-    Path* lastPath; // Last path
+    Path* lastPath; // The last handled path NOTE: Store only internal tree elements!
 } OmiRequestParameters;
 
 //#define OmiRequestParameters_INITIALIZER {.requestType=OmiInvalid, .arrival=}

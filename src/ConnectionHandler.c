@@ -2,7 +2,7 @@
 #include "OmiConstants.h"
 #include <stdio.h>
 
-ConnectionHandler connectionHandler = {NULL, NULL, "", {0}};
+ConnectionHandler connectionHandler = {NULL, NULL, NULL, "", {0}};
 
 const char* omiVersionStr(OmiVersion v) {
     switch (v) {
@@ -47,7 +47,7 @@ void responseStart(const OmiRequestParameters * p, eomi_bool hasOdf){
     send(s_version); send("=\"");
     send(omiVersionNumStr(p->version));
     send("\" ");
-    send(s_ttl); send("=\"%d\">", p->deadline - p->arrival);
+    send(s_ttl); send("=\"%u\">", p->deadline - p->arrival);
     send("<"); send(s_response); send(">");
     send("<"); send(s_result);
     if (hasOdf) {
@@ -81,6 +81,8 @@ void responseEnd(const OmiRequestParameters * p){
     send("</"); send(s_result); send(">");
     send("</"); send(s_response); send(">");
     send("</"); send(s_omiEnvelope); send(">");
+    if (connectionHandler.endResponse)
+        connectionHandler.endResponse(p->connectionId);
 }
 void responseEndWithObjects(const OmiRequestParameters * p){
     responseOdfEnd(p);
@@ -289,6 +291,7 @@ void responseCloseOdfNode(const OmiRequestParameters * p, const Path *node){
 
 void responseFromErrorCode(OmiParser* parser, ErrorResponse err){
     const OmiRequestParameters * p = &parser->parameters;
+    char d[200];
     switch (err) {
         case Err_OK:
         case Err_End:
@@ -330,10 +333,12 @@ void responseFromErrorCode(OmiParser* parser, ErrorResponse err){
             responseFullFailure(p, 501, "Not implemented", parser);
             break;
         case Err_ScriptParse        :
-            responseFullFailure(p, 400, "Script parsing error", parser);
+            snprintf(d, sizeof(d), "Script parsing %s", parser->tempString);
+            responseFullFailure(p, 400, d, parser);
             break;
         case Err_ScriptRun          :
-            responseFullFailure(p, 500, "Script runtime error", parser);
+            snprintf(d, sizeof(d), "Script runtime %s", parser->tempString);
+            responseFullFailure(p, 500, d, parser);
             break;
         case Err_NotFound :
             break; // response started already elsewhere, handle error there

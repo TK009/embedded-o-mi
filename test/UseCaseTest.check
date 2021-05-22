@@ -5,6 +5,9 @@
 #include "testUtils.h"
 #include "OdfTree.h"
 #include <stdio.h>
+#include "string.h"
+
+#include <unistd.h> // sleep
 
 char actualResponse[2048]; // max response size for tests
 char * bufferLocation = actualResponse;
@@ -15,9 +18,15 @@ int saveActualResponse(const char * format, ...) {
   if (ret > 0) bufferLocation += ret;
   return 0;
 }
+int noConnection(const char* c, ...){
+  (void) c;
+  return 0;
+}
+int hookResponseId = 0;
 Printf get(int i) {
-  //if (i==2)
+  if (i != hookResponseId) return noConnection;
   //  return saveActualCallback;
+  //ck_assert_int_eq(i, 0);
   return saveActualResponse;
 }
 #define ResetBuffer() bufferLocation = actualResponse; bufferLocation[0] = '\0'
@@ -26,11 +35,211 @@ Printf get(int i) {
   ResetBuffer()
 
 
+
+
+
+ErrorResponse handleServo(OmiParser *p, Path *path, OdfParserEvent event) {
+    (void) event; (void) path; (void) p;
+    //if (PathGetNodeType(path) != OdfInfoItem) return Err_OK;
+    return Err_OK;
+  }
+
+ErrorResponse handleRgbLed(OmiParser *p, Path *path, OdfParserEvent event) {
+    (void) event; (void) path; (void) p;
+    //if (PathGetNodeType(path) != OdfInfoItem) return Err_OK;
+    return Err_OK;
+}
+bool noPop=false;
+Path * writeStringItem(OmiParser * p, const char * strPath, const char * value) {
+    OmiParser_pushPath(p, strPath, OdfInfoItem);
+    Path * path = p->currentOdfPath;
+    path->flags = V_String;
+    handleWrite(p, path, OdfParserEvent(PE_ValueData, stra(value)));
+    if (noPop) return path;
+    OmiParser_popPath(p);
+    return NULL;
+}
+Path * writeIntItem(OmiParser * p, const char * strPath, int value) {
+    OmiParser_pushPath(p, strPath, OdfInfoItem);
+    Path * path = p->currentOdfPath;
+    path->flags = V_Int;
+    path->value.i = value;
+    handleWrite(p, path, OdfParserEvent(PE_ValueData,NULL));
+    if (noPop) return path;
+    OmiParser_popPath(p);
+    return NULL;
+}
+Path * writeFloatItem(OmiParser * p, const char * strPath, float value) {
+    ck_assert_int_eq(OmiParser_pushPath(p, strPath, OdfInfoItem), Err_OK);
+    Path * path = p->currentOdfPath;
+    path->flags = V_Float;
+    path->value.f = value;
+    ck_assert_int_eq(handleWrite(p, path, OdfParserEvent(PE_ValueData,NULL)), Err_OK);
+    if (noPop) return path;
+    OmiParser_popPath(p);
+    return NULL;
+}
+void addInternalSubscription(OmiParser *p, Path * path, OdfPathCallback handler) {
+    HandlerInfo * subInfo = (HandlerInfo*) poolAlloc(&HandlerInfoPool);
+    *subInfo = (HandlerInfo){
+        .handlerType = HT_Script, 
+        .handler = handler,
+        .another = NULL,
+        .prevOther = NULL,
+        .nextOther = NULL,
+        .callbackInfo = p->parameters, 
+    };
+    subInfo->callbackInfo.connectionId = -1; // do not try to send sub responses
+    int resultIndex = -1;
+    if (odfBinarySearch(&tree, path, &resultIndex)) {
+      Path * subscriptionTarget = &tree.sortedPaths[resultIndex];
+      addSubscription(NULL, subscriptionTarget, &subInfo);
+    }
+}
+
+char * strValue = "a";
+int intValue = 1;
+float floatValue = 1.2;
+bool g_initial = true;
+void writeInternalItems() {
+  bool quick = false; //true;
+  //if (counter++ >= 6) {
+  //  counter = 0;
+  //  quick = false;
+  //}
+  OmiParser pa;
+  OmiParser *p = &pa;
+  OmiParser_init(p, -1); // negative connectionId prevents subscription responses to handlers
+  p->parameters.requestType = OmiWrite;
+
+  if (g_initial) {
+    g_initial=false;
+
+
+    OmiParser_pushPath(p, "Device", OdfObject);
+
+    // Items
+    writeStringItem(p,    "SoftwareBuildTime",     strValue);
+    writeStringItem(p,    "SoftwareBuildDate",     strValue);
+    writeStringItem(p,    "SoftwareBuildVersion",  strValue);
+    writeStringItem(p,    "SoftwareKernelVersion", strValue);
+    writeStringItem(p,    "ChipModel",             strValue);
+    writeStringItem(p,    "SdkVersion",            strValue);
+    writeStringItem(p,    "SoftwareHashMD5",       strValue);
+
+    // Constant
+    //uint32_t getCpuFreqMHz()
+    writeIntItem(p,       "ChipRevision",          intValue);
+    OmiParser_pushPath(p, "Memory",                OdfObject);
+    writeIntItem(p,       "SoftwareSize",          intValue);
+    writeIntItem(p,       "SoftwareSizeFree",      intValue);
+    writeIntItem(p,       "HeapTotal",             intValue);
+    writeIntItem(p,       "PSRAMTotal",            intValue);
+    OmiParser_popPath(p); // Memory
+    OmiParser_popPath(p); // Device
+
+    // Writable items
+    OmiParser_pushPath(p, "RgbLed", OdfObject);
+    Path * path;
+    noPop=true;
+    path = writeIntItem(p, "ColorRGB", 0);
+    noPop=false;
+    addInternalSubscription(p, path, handleRgbLed);
+    OmiParser_popPath(p); // InfoItem
+    OmiParser_popPath(p);
+
+    OmiParser_pushPath(p, "Servo", OdfObject);
+    noPop=true;
+    path = writeFloatItem(p, "SetDegrees", 0);
+    noPop=false;
+    addInternalSubscription(p, path, handleServo);
+    // TODO: add items to modify the max and min
+    OmiParser_popPath(p); // InfoItem
+    OmiParser_popPath(p);
+
+    //dht.begin();
+    //dhtTemp = dht.readTemperature();
+    //dhtHumi = dht.readHumidity();
+  }
+
+  // Non-constant variables
+
+  OmiParser_pushPath(p, "Dht11", OdfObject);
+  writeFloatItem(p, "Temperature", floatValue);
+  writeFloatItem(p, "RelativeHumidity", floatValue);
+  OmiParser_popPath(p);
+
+  ck_assert_int_eq(OmiParser_pushPath(p, "Device", OdfObject), Err_OK);
+  writeFloatItem(p, "ChipTemperature", floatValue);
+  if (!quick) {
+    // Memory information
+    //Internal RAM
+    OmiParser_pushPath(p, "Memory", OdfObject);
+    writeIntItem(p, "HeapFree", intValue);
+    writeIntItem(p, "HeapMinFree", intValue);
+    //largest block of heap that can be allocated at once
+    writeIntItem(p, "HeapLargestFreeBlock", intValue);
+
+    //SPI RAM
+    writeIntItem(p, "PSRAMFree", intValue);
+    writeIntItem(p, "PSRAMMinFree", intValue);
+    //largest block of heap that can be allocated at once
+    writeIntItem(p, "PSRAMLargestFreeBlock", intValue);
+
+    OmiParser_popPath(p); // Memory
+  }
+  OmiParser_popPath(p); // Device
+
+  // End any subscription responses
+  handleWrite(p, NULL, OdfParserEvent(PE_RequestEnd, NULL));
+
+  OmiParser_destroy(p);
+}
+#define MULTILINE_String(...) #__VA_ARGS__
+#define X(x) x
+
+char* scriptReq = X(MULTILINE_String(
+<omiEnvelope xmlns="http://www.opengroup.org/xsd/omi/1.0/" version="1.0" ttl="100">
+  <response>
+    <result msgformat="odf">
+      <return returnCode="200"/>
+      <msg>
+        <Objects xmlns="http://www.opengroup.org/xsd/odf/1.0/" version="1.0">
+          <Object>
+            <id>Servo</id>
+            <InfoItem name="Switch">
+              <MetaData>
+                <InfoItem name="onwrite">
+                  <value unixTime="1621611193">
+                    var sleep = function(milliseconds) {\n
+                      const date = Date.now();\n
+                      let currentDate = null;\n
+                      do {\n
+                        currentDate = Date.now();\n
+                      } while (currentDate - date &lt; milliseconds);\n
+                    };\n
+                    odf.writeItem(0, "Objects/Servo/SetDegrees");\n
+                    sleep(1000);\n
+                    odf.writeItem(180, "Objects/Servo/SetDegrees");\n
+                  </value>
+                </InfoItem>
+              </MetaData>
+              <value unixTime="1621611192" type="xs:boolean">false</value>
+            </InfoItem>
+          </Object>
+        </Objects>
+      </msg>
+    </result>
+  </response>
+</omiEnvelope>
+));
+
 #suite UseCase
 #test UseCaseT
-  const char readAll =
-    "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/1.0/\" version=\"1.0\" ttl=\"0\">"
-    "  <read msgformat=\"odf\">"
+  Allocator latestValueFreer = (Allocator){.free = (FreeF) LatestValue_destroy};
+  char * sub =
+    "<omiEnvelope ttl=\"100.0\" xmlns=\"http://www.opengroup.org/xsd/omi/1.0/\" version=\"1.0\" >"
+    "  <read msgformat=\"odf\" callback=\"0\" interval=\"-1\">"
     "    <msg>"
     "      <Objects xmlns=\"http://www.opengroup.org/xsd/odf/1.0/\">"
     "      </Objects>"
@@ -40,33 +249,55 @@ Printf get(int i) {
   RequestHandler_init();
   StringStorage_init();
   ck_assert(!ScriptEngine_init());
+  connectionHandler.getPrintfForConnection = get;
 
   OmiParser pa;
   OmiParser *p = &pa;
   OmiParser_init(p, 0);
   p->parameters.requestType = OmiWrite;
 
-  Path paths[20]; 
-  OdfTree odf;
-  OdfTree_init(&odf, paths, 20);
-  Path * path;
-  path = addPath(&odf, "Objects/Device", OdfObject);
-  handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
-  path = addPath(&odf, "Objects/Device/MCU", OdfInfoItem);
-  handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
-  path->flags = V_String;
-  handleWrite(p, path, OdfParserEvent(PE_ValueData, stra("ESP32S2")));
+  //Path paths[20]; 
+  //OdfTree odf;
+  //OdfTree_init(&odf, paths, 20);
+  //Path * path;
 
-  //ErrorResponse result = runParser(p, readAll);
-  //switch (result) {
-  //  case Err_OK: break;
-  //  default:
-  //    responseFromErrorCode(p, result);
-  //  case Err_End:
-  //    //endWsMessage(id);
-  //    OmiParser_destroy(p);
-  //    OmiParser_init(p, p->parameters.connectionId);
-  //    break;
-  //}
-  //AssertResponseEquals("")
+  writeInternalItems();
+  ck_assert_int_eq(runParser(p, sub), Err_End);
+  AssertResponseEquals("<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/1.0/\" version=\"1.0\" ttl=\"100\"><response><result><return returnCode=\"200\"/><requestID>5</requestID></result></response></omiEnvelope>");
+
+  sleep(1); // TODO: change to global timestamp
+  writeInternalItems();
+  //AssertResponseEquals("<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/1.0/\" version=\"1.0\" ttl=\"100\"><response><result msgformat=\"odf\"><return returnCode=\"200\"/><msg><Objects xmlns=\"http://www.opengroup.org/xsd/odf/1.0/\" version=\"1.0\"><Object><id>Dht11</id><InfoItem name=\"Temperature\"><value unixTime=\"1621685774\" type=\"xs:float\">1.200000</value></InfoItem><InfoItem name=\"RelativeHumidity\"><value unixTime=\"1621685774\" type=\"xs:float\">1.200000</value></InfoItem><InfoItem name=\"RelativeHumidity\"><value unixTime=\"1621685774\" type=\"xs:float\">1.200000</value></InfoItem></Object><Object><id>Device</id><InfoItem name=\"ChipTemperature\"><value unixTime=\"1621685774\" type=\"xs:float\">1.200000</value></InfoItem><InfoItem name=\"ChipTemperature\"><value unixTime=\"1621685774\" type=\"xs:float\">1.200000</value></InfoItem><Object><id>Memory</id><InfoItem name=\"HeapFree\"><value unixTime=\"1621685774\" type=\"xs:int\">1</value></InfoItem><InfoItem name=\"HeapFree\"><value unixTime=\"1621685774\" type=\"xs:int\">1</value></InfoItem><InfoItem name=\"HeapMinFree\"><value unixTime=\"1621685774\" type=\"xs:int\">1</value></InfoItem><InfoItem name=\"HeapMinFree\"><value unixTime=\"1621685774\" type=\"xs:int\">1</value></InfoItem><InfoItem name=\"HeapLargestFreeBlock\"><value unixTime=\"1621685774\" type=\"xs:int\">1</value></InfoItem><InfoItem name=\"HeapLargestFreeBlock\"><value unixTime=\"1621685774\" type=\"xs:int\">1</value></InfoItem><InfoItem name=\"PSRAMFree\"><value unixTime=\"1621685774\" type=\"xs:int\">1</value></InfoItem><InfoItem name=\"PSRAMFree\"><value unixTime=\"1621685774\" type=\"xs:int\">1</value></InfoItem><InfoItem name=\"PSRAMMinFree\"><value unixTime=\"1621685774\" type=\"xs:int\">1</value></InfoItem><InfoItem name=\"PSRAMMinFree\"><value unixTime=\"1621685774\" type=\"xs:int\">1</value></InfoItem><InfoItem name=\"PSRAMLargestFreeBlock\"><value unixTime=\"1621685774\" type=\"xs:int\">1</value></InfoItem><InfoItem name=\"PSRAMLargestFreeBlock\"><value unixTime=\"1621685774\" type=\"xs:int\">1</value></InfoItem></Object></Object></Objects></msg></result></response></omiEnvelope>");
+  ck_assert_str_eq(bufferLocation - 87, "</value></InfoItem></Object></Object></Objects></msg></result></response></omiEnvelope>"); \
+  ck_assert_int_gt(strlen(actualResponse), 2018);
+  ck_assert_int_lt(strlen(actualResponse), 2130);
+  ResetBuffer();
+
+  sleep(1); // TODO: change to global timestamp
+  writeInternalItems();
+  ck_assert_str_eq(bufferLocation - 87, "</value></InfoItem></Object></Object></Objects></msg></result></response></omiEnvelope>"); \
+  ck_assert_int_gt(strlen(actualResponse), 2018);
+  ck_assert_int_lt(strlen(actualResponse), 2130);
+  ResetBuffer();
+
+  OmiParser_destroy(p);
+  OmiParser_init(p, 0);
+  char * cancel =
+    "<omiEnvelope ttl=\"100.0\" xmlns=\"http://www.opengroup.org/xsd/omi/1.0/\" version=\"1.0\" >"
+    "  <cancel>"
+    "  <requestID>5</requestID>"
+    "  </cancel>"
+    "</omiEnvelope>";
+  ck_assert_int_eq(runParser(p, cancel), Err_End);
+  char * success = "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/1.0/\" version=\"1.0\" ttl=\"100\"><response><result><return returnCode=\"200\"/></result></response></omiEnvelope>";
+  AssertResponseEquals(success);
+  OmiParser_destroy(p);
+  hookResponseId=1;
+  OmiParser_init(p, 1);
+  responseFromErrorCode(p, runParser(p, scriptReq));
+  AssertResponseEquals(success);
+
+
+  OdfTree_destroy(&tree, &StringStorageAllocator, &latestValueFreer);
+  OmiParser_destroy(p);
 

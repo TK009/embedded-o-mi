@@ -40,6 +40,7 @@ LIBS := $(ESP32S2JS) \
 	Adafruit_NeoPixel/ \
 	ESP32-ESP32S2-AnalogWrite/ \
 	DHT-sensor-library \
+	arduinoWebSockets/ \
 
 	#Adafruit_Sensor \
 	#DFRobot_SHT20 \
@@ -58,7 +59,8 @@ JERRY_TOOLCHAIN := ../platforms/esp32s2/jerryscript-toolchain-esp32s2.cmake
 #JERRY_TOOLCHAIN := cmake/toolchain-esp32.cmake
 JERRY_ESP32_OPTIONS := --toolchain=$(JERRY_TOOLCHAIN) --cmake-param "-GUnix Makefiles" \
 				--jerry-cmdline=OFF --jerry-port-default=OFF --lto=OFF --strip=OFF --external-context=ON \
-				--profile=$(abspath jerryscript.profile)
+				--profile=$(abspath jerryscript.profile) \
+				--error-messages=ON --line-info=ON
 
 PATH:=$(PATH):$(ESP_ROOT)/tools/xtensa-esp32s2-elf/bin
 

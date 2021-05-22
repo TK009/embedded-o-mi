@@ -17,6 +17,7 @@
 #endif
 #include <ESPAsyncWebServer.h>
 #include <WiFiMulti.h>
+#include <WebSocketsClient.h>
 
 #include <buildinfo.h>
 
@@ -30,6 +31,7 @@
 #include "StringStorage.h"
 #include "ScriptEngine.h"
 #include "utils.h"
+#include "ParserUtils.h"
 
 #define STR(s) #s
 #define XSTR(x) STR(x)
@@ -142,6 +144,7 @@ int noConnection(const char* c, ...){
 // Each subscription requires own output buffer because of streaming
 typedef struct ConnectionData {
   //AsyncWebSocketMessageBuffer * outputBuffer;
+  enum clientType {CT_AsyncServerClient, CT_StandaloneClient};
   AsyncWebSocketClient * client;
   int outputSize;
   OmiParser * parser;
@@ -187,6 +190,7 @@ int initConnection(AsyncWebSocketClient * client){
 
 // Uses E-O-MI connection id instead of websocket library client id
 Printf getConnectionParserId(int eomiConnId) {
+  //os_printf("R%d ", eomiConnId);
   if (eomiConnId < 0) return noConnection;
   currentConn = &wsConnections[eomiConnId];
   if (currentConn->client == NULL || currentConn->client->status() != WS_CONNECTED)
@@ -196,7 +200,43 @@ Printf getConnectionParserId(int eomiConnId) {
 
 // TODO use Links ws client
 //int openConnection(const char * url) {
-//  AsyncWebSocketClient * client;
+//  int connectionId = initConnection(NULL);
+//  if (connectionId < 0) return connectionId;
+//
+//  WebSocketsClient * client = new WebSocketsClient();
+//  const char * hostStart = strstr(url, "ws://");
+//  if (!hostStart) {
+//    hostStart = url;
+//  };
+//  //char * hostEnd = strchr(hostStart, "/");
+//  const char * hostEnd = hostStart + strcspn(hostStart, ":/");
+//  const char * pathStart = hostEnd;
+//  int port = 80;
+//  if (*hostEnd == ':'){
+//    int portlen = strcspn(hostEnd, "/");
+//    char portStr[7] = {0};
+//    strncpy(portStr, hostEnd+1, portlen-1);
+//    port = parseInt(portStr);
+//    pathStart = hostEnd+portlen;
+//  }
+//  
+//  const char * end = hostStart + strlen(hostStart);
+//  if (!hostEnd) {
+//    hostEnd = end;
+//  }
+//  os_printf("ws connect: host %s port %d path ", hostStart, port);
+//  if (hostEnd == end) {
+//    println("/");
+//    client->begin(hostStart, port, "/");
+//  } else {
+//    char host[200];
+//    strncpy(host, hostStart, min(200,hostEnd-hostStart));
+//    println(host);
+//    client->begin(host, port, pathStart);
+//  }
+//  wsConnections[connectionId].type = client;
+//  wsConnections[connectionId].client = client;
+//  return connectionId;
 //}
 
 
@@ -235,7 +275,7 @@ void destroyConnection(int eomiConnId) {
 void handleParsing(OmiParser * parser, char * data) {
   if (!data[0]) return;
   ErrorResponse result = runParser(parser, data);
-  Serial.printf("PARSE RESULT %d\n", result);
+  Serial.printf("CID: %d PARSE RESULT %d CallbackAddr:%s \n", parser->parameters.connectionId, result, parser->parameters.callbackAddr);
   int id = parser->parameters.connectionId;
   switch (result) {
     case Err_OK: break;
@@ -281,6 +321,10 @@ void onEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
 
     AwsFrameInfo * info = (AwsFrameInfo*)arg;
 
+    if (len == 0) {
+      os_printf("ws[%s][%u] message ping\n", server->url(), client->id());
+      return;
+    }
     if (len+1 > OUTPUT_BUF_SIZE) error();
 
     if(info->final && info->index == 0 && info->len == len){
@@ -383,6 +427,7 @@ void setupEOMI() {
       error();
     }
     connectionHandler.getPrintfForConnection = getConnectionParserId;
+    connectionHandler.endResponse = endWsMessage;
 }
 
 void connectWiFi(){
@@ -416,8 +461,8 @@ void setupWiFi() {
     println("WIFI");
     WiFi.setHostname(hostname);
     //wifiMulti.addAP(ssid, password);
-    wifiMulti.addAP("***REMOVED***", "***REMOVED***");
-    wifiMulti.addAP("***REMOVED***", "***REMOVED***");
+    wifiMulti.addAP(ssid, password);
+    //wifiMulti.addAP("***REMOVED***", "***REMOVED***");
     //wifiMulti.addAP("***REMOVED***", "***REMOVED***");
 
     //WiFi.mode(WIFI_STA);
@@ -467,33 +512,34 @@ void setupNTP() {
   printLocalTime();
 }
 
-Path * writeObject(OmiParser * p, OdfTree & odf, const char * strPath) {
-    Path * path = addPath(&odf, strPath, OdfObject);
-    handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
-    return path;
-}
-Path * writeStringItem(OmiParser * p, OdfTree & odf, const char * strPath, const char * value) {
-    Path * path = addPath(&odf, strPath, OdfInfoItem);
-    handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
+Path * writeStringItem(OmiParser * p, const char * strPath, const char * value, bool noPop=false) {
+    OmiParser_pushPath(p, strPath, OdfInfoItem);
+    Path * path = p->currentOdfPath;
     path->flags = V_String;
     handleWrite(p, path, OdfParserEvent(PE_ValueData, strdup(value)));
-    return path;
+    if (noPop) return path;
+    OmiParser_popPath(p);
+    return NULL;
 }
-Path * writeIntItem(OmiParser * p, OdfTree & odf, const char * strPath, int value) {
-    Path * path = addPath(&odf, strPath, OdfInfoItem);
-    handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
+Path * writeIntItem(OmiParser * p, const char * strPath, int value, bool noPop=false) {
+    OmiParser_pushPath(p, strPath, OdfInfoItem);
+    Path * path = p->currentOdfPath;
     path->flags = V_Int;
     path->value.i = value;
     handleWrite(p, path, OdfParserEvent(PE_ValueData,NULL));
-    return path;
+    if (noPop) return path;
+    OmiParser_popPath(p);
+    return NULL;
 }
-Path * writeFloatItem(OmiParser * p, OdfTree & odf, const char * strPath, float value) {
-    Path * path = addPath(&odf, strPath, OdfInfoItem);
-    handleWrite(p, path, OdfParserEvent(PE_Path, NULL));
+Path * writeFloatItem(OmiParser * p, const char * strPath, float value, bool noPop=false) {
+    OmiParser_pushPath(p, strPath, OdfInfoItem);
+    Path * path = p->currentOdfPath;
     path->flags = V_Float;
     path->value.f = value;
     handleWrite(p, path, OdfParserEvent(PE_ValueData,NULL));
-    return path;
+    if (noPop) return path;
+    OmiParser_popPath(p);
+    return NULL;
 }
 
 
@@ -582,15 +628,15 @@ ErrorResponse handleServo(OmiParser *p, Path *path, OdfParserEvent event) {
 float dhtTemp = 0;
 float dhtHumi = 0;
 
-void readDht(OmiParser * p, OdfTree & odf) {
-  writeObject(p, odf, "Objects/Dht11");
+void readDht(OmiParser * p) {
+  OmiParser_pushPath(p, "Dht11", OdfObject);
   float newTemp = dht.readTemperature();
   if (isnan(newTemp)) {
     Serial.print(F("Error reading temperature! "));
   } else {
     Serial.print(F("Temperature: ")); Serial.print(newTemp); Serial.print("°C ");
-    dhtTemp = dhtTemp * 0.5 + newTemp * 0.5;
-    writeFloatItem(p, odf, "Objects/Dht11/Temperature", dhtTemp);
+    dhtTemp = dhtTemp * 0.75 + newTemp * 0.25;
+    writeFloatItem(p, "Temperature", dhtTemp);
   }
 
   float newHumi = dht.readHumidity();
@@ -598,9 +644,10 @@ void readDht(OmiParser * p, OdfTree & odf) {
     println(F("Error reading humidity!"));
   } else {
     Serial.print(F("Humidity: ")); Serial.print(newHumi); println("%");
-    dhtHumi = dhtHumi * 0.5 + newHumi * 0.5;
-    writeFloatItem(p, odf, "Objects/Dht11/RelativeHumidity", dhtHumi);
+    dhtHumi = dhtHumi * 0.75 + newHumi * 0.25;
+    writeFloatItem(p, "RelativeHumidity", dhtHumi);
   }
+  OmiParser_popPath(p);
 }
 #endif
 
@@ -617,48 +664,48 @@ void writeInternalItems() {
   OmiParser *p = &pa;
   OmiParser_init(p, -1); // negative connectionId prevents subscription responses to handlers
   p->parameters.requestType = OmiWrite;
-  const char maxPaths = 40;
-  Path paths[maxPaths]; 
-  OdfTree odf;
-  OdfTree_init(&odf, paths, maxPaths);
-  //Path * path;
 
   if (g_initial) {
     g_initial=false;
 
 
-    // Objects; NOTE: Each must have its parent defined before
-    writeObject(p, odf, "Objects/Device");
+    OmiParser_pushPath(p, "Device", OdfObject);
 
     // Items
-    writeStringItem(p, odf, "Objects/Device/SoftwareBuildTime", _BuildInfo.time);
-    writeStringItem(p, odf, "Objects/Device/SoftwareBuildDate", _BuildInfo.date);
-    writeStringItem(p, odf, "Objects/Device/SoftwareBuildVersion", _BuildInfo.src_version);
-    writeStringItem(p, odf, "Objects/Device/SoftwareKernelVersion", _BuildInfo.env_version);
-    writeStringItem(p, odf, "Objects/Device/ChipModel", ESP.getChipModel());
-    writeStringItem(p, odf, "Objects/Device/SdkVersion", ESP.getSdkVersion());
-    writeStringItem(p, odf, "Objects/Device/SoftwareHashMD5", ESP.getSketchMD5().c_str());
+    writeStringItem(p, "SoftwareBuildTime", _BuildInfo.time);
+    writeStringItem(p, "SoftwareBuildDate", _BuildInfo.date);
+    writeStringItem(p, "SoftwareBuildVersion", _BuildInfo.src_version);
+    writeStringItem(p, "SoftwareKernelVersion", _BuildInfo.env_version);
+    writeStringItem(p, "ChipModel", ESP.getChipModel());
+    writeStringItem(p, "SdkVersion", ESP.getSdkVersion());
+    writeStringItem(p, "SoftwareHashMD5", ESP.getSketchMD5().c_str());
 
     // Constant
     //uint32_t getCpuFreqMHz()
-    writeIntItem(p, odf, "Objects/Device/ChipRevision", ESP.getChipRevision());
-    writeObject(p, odf, "Objects/Device/Memory");
-    writeIntItem(p, odf, "Objects/Device/Memory/SoftwareSize", ESP.getSketchSize());
-    writeIntItem(p, odf, "Objects/Device/Memory/SoftwareSizeFree", ESP.getFreeSketchSpace());
-    writeIntItem(p, odf, "Objects/Device/Memory/HeapTotal", ESP.getHeapSize());
-    writeIntItem(p, odf, "Objects/Device/Memory/PSRAMTotal", ESP.getPsramSize());
+    writeIntItem(p, "ChipRevision", ESP.getChipRevision());
+    OmiParser_pushPath(p, "Memory", OdfObject);
+    writeIntItem(p, "SoftwareSize", ESP.getSketchSize());
+    writeIntItem(p, "SoftwareSizeFree", ESP.getFreeSketchSpace());
+    writeIntItem(p, "HeapTotal", ESP.getHeapSize());
+    writeIntItem(p, "PSRAMTotal", ESP.getPsramSize());
+    OmiParser_popPath(p); // Memory
+    OmiParser_popPath(p); // Device
 
     // Writable items
-    writeObject(p, odf, "Objects/RgbLed");
+    OmiParser_pushPath(p, "RgbLed", OdfObject);
     Path * path;
-    path = writeIntItem(p, odf, "Objects/RgbLed/ColorRGB", 0);
+    path = writeIntItem(p, "ColorRGB", 0, true);
     addInternalSubscription(p, path, handleRgbLed);
+    OmiParser_popPath(p); // InfoItem
+    OmiParser_popPath(p);
 
 #ifdef ServoEnable
-    writeObject(p, odf, "Objects/Servo");
-    path = writeFloatItem(p, odf, "Objects/Servo/SetDegrees", 0);
+    OmiParser_pushPath(p, "Servo", OdfObject);
+    path = writeFloatItem(p, "SetDegrees", 0, true);
     addInternalSubscription(p, path, handleServo);
-    // TODO: items to modify the max and min
+    // TODO: add items to modify the max and min
+    OmiParser_popPath(p); // InfoItem
+    OmiParser_popPath(p);
 #endif
 
 #ifdef DhtEnable
@@ -671,25 +718,29 @@ void writeInternalItems() {
   // Non-constant variables
 
 #ifdef DhtEnable
-  readDht(p, odf);
+  readDht(p);
 #endif
+
+  OmiParser_pushPath(p, "Device", OdfObject);
+  writeFloatItem(p, "ChipTemperature", temperatureRead());
   if (!quick) {
     // Memory information
     //Internal RAM
-    writeObject(p, odf, "Objects/Device/Memory");
-    writeIntItem(p, odf, "Objects/Device/Memory/HeapFree", ESP.getFreeHeap());
-    writeIntItem(p, odf, "Objects/Device/Memory/HeapMinFree", ESP.getMinFreeHeap());
+    OmiParser_pushPath(p, "Memory", OdfObject);
+    writeIntItem(p, "HeapFree", ESP.getFreeHeap());
+    writeIntItem(p, "HeapMinFree", ESP.getMinFreeHeap());
     //largest block of heap that can be allocated at once
-    writeIntItem(p, odf, "Objects/Device/Memory/HeapLargestFreeBlock", ESP.getMaxAllocHeap());
+    writeIntItem(p, "HeapLargestFreeBlock", ESP.getMaxAllocHeap());
 
     //SPI RAM
-    writeIntItem(p, odf, "Objects/Device/Memory/PSRAMFree", ESP.getFreePsram());
-    writeIntItem(p, odf, "Objects/Device/Memory/PSRAMMinFree", ESP.getMinFreePsram());
+    writeIntItem(p, "PSRAMFree", ESP.getFreePsram());
+    writeIntItem(p, "PSRAMMinFree", ESP.getMinFreePsram());
     //largest block of heap that can be allocated at once
-    writeIntItem(p, odf, "Objects/Device/Memory/PSRAMLargestFreeBlock", ESP.getMaxAllocPsram());
+    writeIntItem(p, "PSRAMLargestFreeBlock", ESP.getMaxAllocPsram());
 
+    OmiParser_popPath(p); // Memory
   }
-  writeFloatItem(p, odf, "Objects/Device/ChipTemperature", temperatureRead());
+  OmiParser_popPath(p); // Device
 
   // End any subscription responses
   handleWrite(p, NULL, OdfParserEvent(PE_RequestEnd, NULL));

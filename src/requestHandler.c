@@ -217,7 +217,7 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                         // NOTE: allocated string re-used, FIXME: use HString as event data
                         HString script = {.value = event.data, .length = p->tempStringLength, .hash = p->stHash.hash};
                         // Check that code can be parsed
-                        ErrorResponse parseResult = ScriptEngine_testParse(&script);
+                        ErrorResponse parseResult = ScriptEngine_testParse(p, &script);
                         if (parseResult) {
                             p->stringAllocator->free(event.data);
                             return parseResult;
@@ -308,13 +308,38 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                                     p->callbackOpenFlag |= 1 << p->parameters.connectionId;
                                 }
                             }
-
+                            // use current write request pathStack to open any Object nodes before this InfoItem
                             for (Path * pathToOpen = p->pathStack; pathToOpen < p->currentOdfPath; ++pathToOpen){
                                 ErrorResponse res = handler->handler(p, pathToOpen, readEvent);
                                 // error reporting?
                                 if (res) {
                                     p->parameters = requestParams;
-                                    return res;
+                                    return res; // FIXME: check if sub connections are left hanging
+                                }
+                            }
+                        } else {
+                            // Check if there were any Object nodes after the last triggering item
+                            if (p->currentOdfPath->parent->hashCode != p->parameters.lastPath->hashCode) {
+                                // collect the path elements of lastPath, similar to p->pathStack
+                                Path * lastPathStack[OdfDepthLimit];
+                                for (Path * tmp = p->parameters.lastPath; tmp->parent; tmp = tmp->parent)
+                                    lastPathStack[PathGetDepth(tmp)-1] = tmp;
+
+                                // Compare pathStacks and handle starting from the first differing element
+                                const int maxDepth = PathGetDepth(p->currentOdfPath);
+                                eomi_bool openRest = eomi_false;
+                                for (int i = 1; i < maxDepth; ++i){
+                                //for (Path * pathToOpen = p->pathStack; pathToOpen < p->currentOdfPath; ++pathToOpen){
+                                    Path * pathToOpen = &p->pathStack[i];
+                                    if (openRest || pathToOpen->hashCode != lastPathStack[i]->hashCode){
+                                        openRest = eomi_true;
+                                        ErrorResponse res = handler->handler(p, pathToOpen, readEvent);
+                                        // error reporting?
+                                        if (res) {
+                                            p->parameters = requestParams;
+                                            return res; // FIXME: check if sub connections are left hanging
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -322,11 +347,9 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                         ErrorResponse res = handler->handler(p, storedPathSegment, readEvent);
                         // 
                         handler->callbackInfo = p->parameters;
+
                         p->parameters = requestParams;
-                        if (res) {
-                            p->parameters = requestParams;
-                            return res;
-                        }
+                        if (res) return res; // FIXME: check if sub connections are left hanging
                     }
 
                 return Err_OK;
@@ -344,10 +367,11 @@ ErrorResponse handleWrite(OmiParser *p, Path *path, OdfParserEvent event) {
                 int connectionId = first1Bit(p->callbackOpenFlag);
                 HandlerInfo * sub = connectionHandler.connections[connectionId].responsibleHandler;
                 OmiRequestParameters requestParams = p->parameters;
-                p->parameters = sub->callbackInfo;
-                sub->handler(p, NULL, event);
-                p->parameters.lastPath = NULL;
-                p->parameters = requestParams;
+                p->parameters = sub->callbackInfo; // change into sub response mode
+                sub->handler(p, NULL, event); // RequestEnd
+                p->parameters.lastPath = NULL; // initialize for the next response
+                sub->callbackInfo = p->parameters; // save initilized params (last path)
+                p->parameters = requestParams; // restore current request
                 p->callbackOpenFlag ^= 1 << connectionId;
             }
 
@@ -441,6 +465,7 @@ ErrorResponse handleRead(OmiParser *p, Path *path, OdfParserEvent event) {
         };
         subInfo->callbackInfo.requestType = OmiRead;
         subInfo->callbackInfo.lastPath = NULL;
+        subInfo->callbackInfo.callbackAddr = (char*) storeString(p->parameters.callbackAddr);
     }
     switch (event.type) {
         case PE_Path:
@@ -508,6 +533,8 @@ ErrorResponse handleCancel(OmiParser * p, Path *path, OdfParserEvent event) {
                 if (prev) prev->nextOther = next;
                 if (next) next->prevOther = prev;
                 next = subInfo->another;
+                if (subInfo->callbackInfo.callbackAddr)
+                    freeString(subInfo->callbackInfo.callbackAddr);
                 poolFree(&HandlerInfoPool, subInfo);
             }
             responseFullSuccess(&p->parameters);

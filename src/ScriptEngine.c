@@ -123,11 +123,27 @@ odfWriteItem_handler(const jerry_call_info_t *call_info_p, /**< call information
     return jerry_create_undefined();
 }
 
-int ScriptEngine_testParse(const HString* script) {
+void jerryErrorMessage(jerry_value_t error, char * buffer, int bufferSize) {
+    jerry_value_t errValue  = jerry_get_value_from_error(error, false);
+    //jerry_error_t errorType = jerry_get_error_type(errValue);
+    jerry_value_t errString = jerry_value_to_string(errValue);
+    jerry_size_t length     = jerry_get_utf8_string_size(errString);
+    int maxLen = (length < bufferSize)? length : bufferSize;
+    jerry_string_to_utf8_char_buffer(
+            errString, (jerry_char_t *) buffer, maxLen);
+    buffer[maxLen] = '\0';
+    jerry_release_value(errValue);
+    jerry_release_value(errString);
+}
+
+int ScriptEngine_testParse(OmiParser * p, const HString* script) {
     jerry_value_t parsed_code =
         jerry_parse((jerry_char_t*) script->value,
                 script->length - 1, NULL);
     bool notOk = jerry_value_is_error(parsed_code);
+    if (notOk) {
+        jerryErrorMessage(parsed_code, p->tempString, ParserMaxStringLength);
+    }
     jerry_release_value (parsed_code);
 
     return notOk ? Err_ScriptParse: Err_OK;
@@ -254,6 +270,8 @@ int ScriptEngine_run(OmiParser * p, Path * path, const HString * firstScript) {
             jerry_value_t ret_value = jerry_run(parsed_code);
 
             runError = jerry_value_is_error(ret_value);
+            if (runError)
+                jerryErrorMessage(ret_value, p->tempString, ParserMaxStringLength);
 
             jerry_release_value (ret_value);
         }

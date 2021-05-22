@@ -21,7 +21,7 @@ extern "C" {
 #endif
 
 #ifndef ParserMaxStringLength
-#define ParserMaxStringLength 256
+#define ParserMaxStringLength 512
 #endif
 
 #ifndef XmlParserBufferSize
@@ -121,7 +121,7 @@ struct OmiParser {
     char tempString[ParserMaxStringLength];
     char xmlBuffer[XmlParserBufferSize];
 };
-OmiParser* OmiParser_init(OmiParser* p, uchar connectionId);
+OmiParser* OmiParser_init(OmiParser* p, int connectionId);
 void OmiParser_destroy(OmiParser* p);
 
 // Return eomi_true on success, eomi_false on failure
@@ -145,7 +145,7 @@ char* storeTempString(OmiParser *p, const char * str, size_t stringLength);
 //  void * parameter;
 //} ParserSource;
 
-OmiParser* getParser(uchar connectionId);
+OmiParser* getParser(int connectionId);
 ErrorResponse runParser(OmiParser * p, char * inputChunk);
 yxml_ret_t runXmlParser(OmiParser * p, char ** inputChunkP, uint maxBytes);
 

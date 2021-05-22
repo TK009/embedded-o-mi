@@ -29,7 +29,7 @@ char* storeTempString(OmiParser *p, const char * str, size_t stringLength) {
     if (!resultVariable) return Err_OOM_String
 
 
-OmiParser* OmiParser_init(OmiParser* p, uchar connectionId) {
+OmiParser* OmiParser_init(OmiParser* p, int connectionId) {
     if (p) {
         *p = (OmiParser){
             .bytesRead = 0,
@@ -53,7 +53,7 @@ OmiParser* OmiParser_init(OmiParser* p, uchar connectionId) {
     }
     return p;
 }
-OmiParser* getParser(uchar connectionId) {
+OmiParser* getParser(int connectionId) {
     for (int i = 0; i < ParserPoolSize; ++i) {
         OmiParser * p = &parsers[i];
         if (p->st == OmiState_Ready) {
@@ -233,6 +233,9 @@ static inline int processVerb(OmiParser *p, yxml_ret_t r) {
                     break;
                 default: return Err_InvalidElement;
             }
+            return Err_OK;
+        case YXML_ELEMEND:
+            p->st = OdfState_End;
         default: break;
     }
     return 0;

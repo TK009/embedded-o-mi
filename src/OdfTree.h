@@ -49,7 +49,7 @@ typedef enum NodeType {
 // General idea is to build a prefix tree for O-DF
 // ...in other words, linked list of each Path sharing same elements
 struct Path {
-    uchar depth; // Objects: 1 FIXME: moving to top breaks test (error?)
+    uchar depth; // Objects: 1
     uchar odfIdLength;
     OdfId odfId;
     struct Path* parent;

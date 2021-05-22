@@ -184,7 +184,7 @@ Printf get(int i) {
     parser.st = OmiState_OmiEnvelope;
     #define TestErrorCode(errcode, returncode, message) \
       responseFromErrorCode(&parser, errcode); \
-      ck_assert_str_eq(&actualResponse[87], "returnCode=\"" # returncode "\" description=\"" message "; Near omiEnvelope\"/></result></response></omiEnvelope>"); \
+      ck_assert_str_eq(&actualResponse[86], "returnCode=\"" # returncode "\" description=\"" message "; Near omiEnvelope\"/></result></response></omiEnvelope>"); \
       ResetBuffer()
     responseFromErrorCode(&parser, Err_OK);
     AssertResponseEquals("");
@@ -204,8 +204,8 @@ Printf get(int i) {
     TestErrorCode(Err_OOM_String, 500, "Out of text memory");
     TestErrorCode(Err_OOM, 500, "Out of memory");
     TestErrorCode(Err_NotImplemented, 501, "Not implemented");
-    TestErrorCode(Err_ScriptParse, 400, "Script parsing error");
-    TestErrorCode(Err_ScriptRun, 500, "Script runtime error");
+    TestErrorCode(Err_ScriptParse, 400, "Script parsing ");
+    TestErrorCode(Err_ScriptRun, 500, "Script runtime ");
 
     OmiParser_destroy(&parser);
 

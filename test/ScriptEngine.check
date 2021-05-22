@@ -93,13 +93,15 @@ int createGlobalJsApi();
   // tests that external context is configured correctly
   ck_assert_int_eq(ScriptEngine_init(), 0);
 
-  ck_assert_int_eq(ScriptEngine_testParse(HString_init(script, "\"Hello World!\";")), 0);
-  ck_assert_int_eq(ScriptEngine_testParse(HString_init(script, "var x = 'Hello World!';")), 0);
-  ck_assert_int_eq(ScriptEngine_testParse(HString_init(script, "varx'Hello World!';")), Err_ScriptParse);
+  ck_assert_int_eq(ScriptEngine_testParse(p, HString_init(script, "\"Hello World!\";")), 0);
+  ck_assert_int_eq(ScriptEngine_testParse(p, HString_init(script, "var x = 'Hello World!';")), 0);
+  ck_assert_int_eq(ScriptEngine_testParse(p, HString_init(script, "varx'Hello World!';")), Err_ScriptParse);
+  ck_assert_str_eq(p->tempString, "SyntaxError: Expected ';' token [<anonymous>:1:5]");
 
   mark_point(); // show abort error line here if it happens
-  ck_assert_int_eq(ScriptEngine_run(NULL, path, HString_init(script, "var x = 'Hello World!';")), 0);
-  ck_assert_int_eq(ScriptEngine_run(NULL, path, HString_init(script, "var x = y;")), Err_ScriptRun);
+  ck_assert_int_eq(ScriptEngine_run(p, path, HString_init(script, "var x = 'Hello World!';")), 0);
+  ck_assert_int_eq(ScriptEngine_run(p, path, HString_init(script, "var x = y;")), Err_ScriptRun);
+  ck_assert_str_eq(p->tempString, "ReferenceError: y is not defined");
 
   StringStorage_init();
   RequestHandler_init();
@@ -110,6 +112,11 @@ int createGlobalJsApi();
   ck_assert_int_eq(ScriptEngine_run(p, path, HString_init(script, "odf.writeItem(5, '"
     "ueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueue"
     "ueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueueue"
+    "trololololololololololololololololololololololololololololololololololololololololololololololololololololololololololol"
+    "trololololololololololololololololololololololololololololololololololololololololololololololololololololololololololol"
+    "trololololololololololololololololololololololololololololololololololololololololololololololololololololololololololol"
+    "trololololololololololololololololololololololololololololololololololololololololololololololololololololololololololol"
+    "trololololololololololololololololololololololololololololololololololololololololololololololololololololololololololol"
     "trololololololololololololololololololololololololololololololololololololololololololololololololololololololololololol"
     "');"
   )), Err_ScriptRun);
