@@ -9,7 +9,7 @@
 
 #include <unistd.h> // sleep
 
-char actualResponse[2048]; // max response size for tests
+char actualResponse[4096]; // max response size for tests
 char * bufferLocation = actualResponse;
 int saveActualResponse(const char * format, ...) {
   va_list argptr;
@@ -219,7 +219,7 @@ char* scriptReq = X(MULTILINE_String(
                       } while (currentDate - date &lt; milliseconds);\n
                     };\n
                     odf.writeItem(0, "Objects/Servo/SetDegrees");\n
-                    sleep(1000);\n
+                    sleep(100);\n
                     odf.writeItem(180, "Objects/Servo/SetDegrees");\n
                   </value>
                 </InfoItem>
@@ -240,6 +240,15 @@ char* scriptReq = X(MULTILINE_String(
   char * sub =
     "<omiEnvelope ttl=\"100.0\" xmlns=\"http://www.opengroup.org/xsd/omi/1.0/\" version=\"1.0\" >"
     "  <read msgformat=\"odf\" callback=\"0\" interval=\"-1\">"
+    "    <msg>"
+    "      <Objects xmlns=\"http://www.opengroup.org/xsd/odf/1.0/\">"
+    "      </Objects>"
+    "    </msg>"
+    "  </read>"
+    "</omiEnvelope>";
+  char * readAll =
+    "<omiEnvelope ttl=\"100.0\" xmlns=\"http://www.opengroup.org/xsd/omi/1.0/\" version=\"1.0\" >"
+    "  <read msgformat=\"odf\">"
     "    <msg>"
     "      <Objects xmlns=\"http://www.opengroup.org/xsd/odf/1.0/\">"
     "      </Objects>"
@@ -276,6 +285,7 @@ char* scriptReq = X(MULTILINE_String(
   sleep(1); // TODO: change to global timestamp
   writeInternalItems();
   ck_assert_str_eq(bufferLocation - 87, "</value></InfoItem></Object></Object></Objects></msg></result></response></omiEnvelope>"); \
+  ck_assert_str_eq(bufferLocation - 87, "</value></InfoItem></Object></Object></Objects></msg></result></response></omiEnvelope>"); \
   ck_assert_int_gt(strlen(actualResponse), 2018);
   ck_assert_int_lt(strlen(actualResponse), 2130);
   ResetBuffer();
@@ -297,6 +307,18 @@ char* scriptReq = X(MULTILINE_String(
   responseFromErrorCode(p, runParser(p, scriptReq));
   AssertResponseEquals(success);
 
+  // test correct internal ordering
+  for (int i = 1; i < tree.size; ++i) {
+    ck_assert_int_lt(pathCompare(&tree.sortedPaths[i-1], &tree.sortedPaths[i]), 0);
+  }
+  OmiParser_destroy(p);
+
+  // test correct output ordering
+  OmiParser_init(p, 1);
+  runParser(p, readAll);
+  char * expectedStart = "<omiEnvelope xmlns=\"http://www.opengroup.org/xsd/omi/1.0/\" version=\"1.0\" ttl=\"100\"><response><result msgformat=\"odf\"><return returnCode=\"200\"/><msg><Objects xmlns=\"http://www.opengroup.org/xsd/odf/1.0/\" version=\"1.0\"><Object><id>Device</id><InfoItem name=";
+  actualResponse[strlen(expectedStart)] = 0;
+  ck_assert_str_eq(actualResponse+148, expectedStart+148);
 
   OdfTree_destroy(&tree, &StringStorageAllocator, &latestValueFreer);
   OmiParser_destroy(p);

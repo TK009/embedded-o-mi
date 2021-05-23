@@ -69,22 +69,45 @@ TODO
 Backlog of features that could be implemented are listed in this section.
 
 Undecided features (should be implemented or not?):
-* InfoItem write handlers; ability to replace write values before subscription trigger and save
+* Scripting InfoItem write handlers; ability to replace write values before subscription trigger and save ("responsible agent")
 
 Sorted by about highest to lowest priority:
 
-* Arduino-ESP: Change/Modify websocket library to allow message frame streaming (currently the whole message needs to be passed in one chunk)
+* Fix crash bug when subscribing to items that also have scripts (trace; requestHandler.c:43, requestHandler.c:423,502,571 OMIParser.c:336)
+* Arduino-ESP: Change/Modify websocket library to allow output message frame streaming 
+    - Some tools expect the whole request/response be in one ws message
+    - Currently the whole message needs to be passed as one chunk (library limitation)
+    - Fix allows more concurrent clients and/or memory as buffers can be reduced
 * Arduino-ESP: add ws url callback support
+    - to allow device to device subscriptions added from a configurator app
+* Arduino-ESP: fix parser reuse for open connections and refactor async code handling with locks
+    - bugs where parsers or input buffers are not released correctly
+* Change parser string buffer to dynamic when full, instead of cutting the text
+    - The buffer is used for long string values
+    - Mainly problem with long scripts or descriptions; other strings are usually short
+    - current limit is `1024` chars (`ParserSinglePassLength` define)
 * Automatic current connection subscription cancel on connection close
+    - otherwise memory is wasted
 * Fix script write self path causing incorrect subscription notifications when subscribing after script addition
-   - first result is the raw value and second is value modified and written by the script
-   - options include maintaining write handler order with scripts having higher priority or in separate item/list
-   - manual workaround: always write to other item in scripts
-* Streaming output (esp async websocket library add chunk stream)
+    - first result is the raw value and second is value modified and written by the script
+    - options include maintaining write handler order with scripts having higher priority or in separate item/list
+    - manual workaround: always write to other item in scripts
 * Script API: read infoitems
+    - makes some logic easier to implement in scripts
+    - workaround: put a onwrite script in the interesting items to copy the walue in a global var
+* Interval subscription request
+* Delete request
 * Object(s) level subscriptions that expand when new children are added 
+    - currently subscribes only currently existing leaf nodes
 * Flash storage for latest values
-* Script API: subscription handler scripts to transform incompatible formats
+    - flash wears fast -> spread over all available space
+    - flash needs to be written in chunks -> better to collect full chunk before writing
+    - maybe by using proprietary attribute to trigger flash write
 * Value history (maybe with poll subscriptions only)
+    - Circular buffers?
+* Script API: subscription handler scripts to change incoming paths before write or do something completely different with the data
 * Parser named xmlns attributes
+    - does not understand them, easiest fix would be to remove any prefixes as there is no overlap with O-MI and O-DF
 * Creation subscriptions; interval=-2
+    - 
+

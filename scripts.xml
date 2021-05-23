@@ -7,17 +7,17 @@
         <Objects xmlns="http://www.opengroup.org/xsd/odf/1.0/" version="1.0">
           <Object>
             <id>Dht11</id>
-            <InfoItem name="Humidity">
+            <InfoItem name="RelativeHumidity">
               <MetaData>
                 <InfoItem name="onwrite">
                   <value unixTime="1621611193">
-if (typeof triggered !== "undefined") triggered = false;
-if (event.value &gt; 60 &amp;&amp; !triggered) {
-  triggered = true;
+if (!Object.hasOwnProperty("triggered")) Object.triggered = false;
+if (event.value &gt; 52 &amp;&amp; !Object.triggered) {
+  Object.triggered = true;
   odf.writeItem(true, "Objects/Servo/Switch");
 }
-if (event.value &lt; 40 &amp;&amp; triggered) {
-  triggered = false;
+if (event.value &lt; 45 &amp;&amp; Object.triggered) {
+  Object.triggered = false;
   odf.writeItem(false, "Objects/Servo/Switch");
 }
                   </value>

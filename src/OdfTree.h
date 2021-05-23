@@ -32,9 +32,9 @@ typedef struct SingleValue {
 
 typedef enum NodeType {
     OdfDescription = 0,
-    OdfMetaData = 1,
-    OdfInfoItem = 2,
-    OdfObject = 3,
+    OdfMetaData    = 1,
+    OdfInfoItem    = 3,
+    OdfObject      = 2, // TODO: check why this fixes InfoItem order in UseCaseT
 } NodeType;
 
 #define OdfDepth(depth, nodetype) (((depth) << 2) + (nodetype))

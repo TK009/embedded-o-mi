@@ -9,6 +9,7 @@
 #include <esp32-hal-psram.h>
 #include <esp32-hal.h>
 #include <Arduino.h>
+#include <ArduinoOTA.h>
 #ifdef ESP32
 #include <WiFi.h>
 #include <AsyncTCP.h>
@@ -22,6 +23,7 @@
 #include <ESPAsyncWebServer.h>
 #include <WiFiMulti.h>
 #include <WebSocketsClient.h>
+
 
 #include <buildinfo.h>
 
@@ -577,7 +579,7 @@ ErrorResponse handleRgbLed(OmiParser *p, Path *path, OdfParserEvent event) {
       default:
         return Err_InvalidAttribute;
     }
-    os_printf("Actuator Color %d\n", color);
+    //os_printf("Actuator Color %d\n", color);
     pixel.setBrightness(color >> 24);
     pixel.setPixelColor(0,color & 0x00FFFFFF);
     pixel.show();
@@ -607,7 +609,7 @@ ErrorResponse handleServo(OmiParser *p, Path *path, OdfParserEvent event) {
         return Err_InvalidAttribute;
     }
     servoPowersaveTimer.detach();
-    os_printf("Actuator Servo angle %f ", angle);
+    //os_printf("Actuator Servo angle %f ", angle);
 
     constexpr float in_min=0;
     constexpr float in_max=180;
@@ -615,7 +617,7 @@ ErrorResponse handleServo(OmiParser *p, Path *path, OdfParserEvent event) {
     constexpr float out_max=(2.1/20.0 * (1<<(SERVO_RESOLUTION)));
     int32_t pwm = constrain((angle - in_min) * (out_max - out_min) / (in_max - in_min) + out_min,
         out_min, out_max);
-    os_printf("pwm %d / %f \n", pwm, out_max);
+    //os_printf("pwm %d / %f \n", pwm, out_max);
     analogWrite(ServoPin, pwm, SERVO_FREQ, SERVO_RESOLUTION);
     servoPowersaveTimer.once(3, servoPowerOff);
     return Err_OK;
@@ -756,6 +758,22 @@ void setupTimers() {
   internalWriteTimer.attach(10, writeInternalItems);
 }
 
+void setupOTA() {
+// OTA callbacks
+  ArduinoOTA.setPassword("admin");
+  ArduinoOTA.onStart([]() {
+    // Clean SPIFFS
+    //SPIFFS.end();
+
+    // Disable client connections    
+    ws.enable(false);
+
+    // Close them
+    ws.closeAll();
+  });
+  ArduinoOTA.begin();
+}
+
 void setup() {
     Serial.begin(115200);
     println("\nBOOT");
@@ -792,6 +810,8 @@ void loop() {
     }
   }
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
+  ArduinoOTA.handle();
 }
 
+// if (typeof triggered !== "undefined") triggered = false;
 

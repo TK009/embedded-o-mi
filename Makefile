@@ -192,7 +192,7 @@ $(OBJDIR)/%.log: $(OBJDIR)/%.test
 #CK_FORK=no valgrind -q --leak-check=full $< >> $@
 
 tags: $(SRCS)
-	ctags -R src obj
+	ctags -R src obj platforms
 
 NEWESTSOURCE="${SRCDIR}/$(shell ls -t ${SRCDIR} | head -1)" 
 SHOW_COVERAGE_LINES ?= 25

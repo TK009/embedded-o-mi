@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<omiEnvelope xmlns="http://www.opengroup.org/xsd/omi/1.0/" version="1.0" ttl="-1141369704">
+  <response>
+    <result msgformat="odf">
+      <return returnCode="200"/>
+      <msg>
+        <Objects xmlns="http://www.opengroup.org/xsd/odf/1.0/" version="1.0">
+          <Object>
+            <id>Dht11</id>
+            <InfoItem name="RelativeHumidity">
+              <value unixTime="10000" type="xs:float">60.0</value>
+            </InfoItem>
+          </Object>
+        </Objects>
+      </msg>
+    </result>
+  </response>
+</omiEnvelope>

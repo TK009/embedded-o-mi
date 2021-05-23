@@ -35,6 +35,7 @@ LIBS := $(ESP32S2JS) \
 	$(JERRY_DIR)/jerry-core/include/ \
 	$(JERRY_DIR)/jerry-ext/include/ \
 	$(JERRY_DIR)/targets/esp-idf/*.c \
+	ArduinoOTA/ \
 	AsyncTCP \
 	ESPAsyncWebServer \
 	Adafruit_NeoPixel/ \

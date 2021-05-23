@@ -60,7 +60,7 @@ schar pathCompare(const Path *a, const Path *b) {
         if (a->hashCode == b->hashCode) return 0;
         return strncmp(a->odfId, b->odfId, min(a->odfIdLength, b->odfIdLength)+1);
     }
-    return a->depth - b->depth; // should be -1 or 1
+    return a->depth - b->depth; // should be -x or +x
 }
 
 // returns eomi_true if found, eomi_false if not found. `result` contains index of found
