@@ -205,7 +205,7 @@ tests: $(TESTBINARIES)
 test: $(TESTRESULTS) tags
 	@echo
 	@llvm-profdata merge -sparse $(TESTDATA) -o $(OBJDIR)/default.profdata
-	@llvm-cov report --use-color -ignore-filename-regex='yxml*' --instr-profile=$(OBJDIR)/default.profdata $(TESTBINARIES) $(addprefix "--object=", $(TESTBINARIES)) | sed 's/-----------------------------------------//'
+	@llvm-cov report --use-color -ignore-filename-regex='(yxml.*|.*.check.c)' --instr-profile=$(OBJDIR)/default.profdata $(TESTBINARIES) $(addprefix "--object=", $(TESTBINARIES)) | sed 's/-----------------------------------------//'
 	@echo
 	@echo "Some uncovered regions (search for 0 count lines if no red) in $(NEWESTSOURCE):"
 	@llvm-cov show $(TESTBINARIES) $(NEWESTSOURCE) $(COVERAGE_OPTIONS) | $(COVERAGE_FILTER) | head -n $(SHOW_COVERAGE_LINES) || true

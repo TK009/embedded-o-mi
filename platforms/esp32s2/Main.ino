@@ -413,6 +413,7 @@ void setupPSRAM() {
       println("PSRAM");
       if (psramInit()) {
         StringStorageAllocator = PsramAllocator;
+        ScriptEngineAllocator = PsramAllocator;
         // Anything else to psram?
       } else {
         error();
@@ -457,8 +458,14 @@ void connectWiFi(){
     Serial.print("IP: ");
     println(WiFi.localIP());
     pixel.setPixelColor(0, 0,255,255); pixel.show();
+
     println("mDNS");
     if (!MDNS.begin(hostname)) error();
+
+    MDNS.addService("ws", "tcp", 80);
+    MDNS.addService("http", "tcp", 80);
+    MDNS.addService("o-mi", "tcp", 80);
+
 }
 void setupWiFi() {
     println("WIFI");
@@ -687,8 +694,8 @@ void writeInternalItems() {
     //uint32_t getCpuFreqMHz()
     writeIntItem(p, "ChipRevision", ESP.getChipRevision());
     OmiParser_pushPath(p, "Memory", OdfObject);
-    //TODO: writeIntItem(p, "SoftwareSize", ESP.getSketchSize());
-    //TODO: writeIntItem(p, "SoftwareSizeFree", ESP.getFreeSketchSpace());
+    writeIntItem(p, "SoftwareSize", ESP.getSketchSize());
+    writeIntItem(p, "SoftwareSizeFree", ESP.getFreeSketchSpace());
     writeIntItem(p, "HeapTotal", ESP.getHeapSize());
     writeIntItem(p, "PSRAMTotal", ESP.getPsramSize());
     OmiParser_popPath(p); // Memory

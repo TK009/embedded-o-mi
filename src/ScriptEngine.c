@@ -262,7 +262,15 @@ int ScriptEngine_run(OmiParser * p, Path * path, const HString * firstScript) {
             jerry_release_value(prop);
             jerry_release_value(propName);
             jerry_release_value(setResult);
-            jerry_release_value(global);
+
+
+            // Set a Node.js like global var
+            prop      = global;
+            propName  = jerry_create_string((const jerry_char_t *) "global");
+            setResult = jerry_set_property(global, propName, prop);
+            jerry_release_value(prop);
+            jerry_release_value(propName);
+            jerry_release_value(setResult);
 
 
 

@@ -1,7 +1,7 @@
 
 CHIP:=esp32
 BOARD:=esp32s2
-ESP_ROOT:=$(HOME)/esp/arduino-esp32
+ESP_ROOT:=/ssd-data/coding/esp/arduino-esp32
 
 # use: make list_flash_defs
 #FLASH_DEF=

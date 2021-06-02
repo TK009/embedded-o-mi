@@ -11,13 +11,13 @@
               <MetaData>
                 <InfoItem name="onwrite">
                   <value unixTime="1621611193">
-if (!Object.hasOwnProperty("triggered")) Object.triggered = false;
-if (event.value &gt; 52 &amp;&amp; !Object.triggered) {
-  Object.triggered = true;
+if (!global.hasOwnProperty("triggered")) global.triggered = false;
+if (event.value &gt; 46 &amp;&amp; !global.triggered) {
+  global.triggered = true;
   odf.writeItem(true, "Objects/Servo/Switch");
 }
-if (event.value &lt; 45 &amp;&amp; Object.triggered) {
-  Object.triggered = false;
+if (event.value &lt; 35 &amp;&amp; global.triggered) {
+  global.triggered = false;
   odf.writeItem(false, "Objects/Servo/Switch");
 }
                   </value>

@@ -80,7 +80,7 @@ Path* OmiParser_popPath(OmiParser* p){
     Path* old = p->currentOdfPath;
     if (!old) return NULL;
     if (old->idHashCode != h_Objects)
-        free((void*) old->odfId); // TODO: change hardcoded free function if custom allocator is used
+        p->stringAllocator->free((void*) old->odfId); // TODO: change hardcoded free function if custom allocator is used
     //if (old->flags & PF_ValueMalloc) // free handled by the odfCallback
     //    free((void*) old->value.str); // TODO: change hardcoded free function if custom allocator is used
     if (old == p->pathStack) // root

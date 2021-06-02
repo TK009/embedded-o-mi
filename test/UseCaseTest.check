@@ -211,16 +211,20 @@ char* scriptReq = X(MULTILINE_String(
               <MetaData>
                 <InfoItem name="onwrite">
                   <value unixTime="1621611193">
-                    var sleep = function(milliseconds) {\n
-                      const date = Date.now();\n
-                      let currentDate = null;\n
-                      do {\n
-                        currentDate = Date.now();\n
-                      } while (currentDate - date &lt; milliseconds);\n
-                    };\n
-                    odf.writeItem(0, "Objects/Servo/SetDegrees");\n
-                    sleep(100);\n
-                    odf.writeItem(180, "Objects/Servo/SetDegrees");\n
+var sleep = function(milliseconds) {\n
+  const date = Date.now();\n
+  let currentDate = null;\n
+  do {\n
+    currentDate = Date.now();\n
+  } while (currentDate - date &lt; milliseconds);\n
+};\n
+odf.writeItem(0, "Objects/Servo/SetDegrees");\n
+sleep(50);\n
+odf.writeItem(180, "Objects/Servo/SetDegrees");\n
+if (!global.hasOwnProperty("triggered")) {
+  global.triggered = true;
+  odf.writeItem(true, "Objects/Servo/Test");\n
+}
                   </value>
                 </InfoItem>
               </MetaData>
@@ -306,6 +310,11 @@ char* scriptReq = X(MULTILINE_String(
   OmiParser_init(p, 1);
   responseFromErrorCode(p, runParser(p, scriptReq));
   AssertResponseEquals(success);
+
+  //OmiParser_destroy(p);
+  //OmiParser_init(p, 1);
+  //responseFromErrorCode(p, runParser(p, ?));
+  //AssertResponseEquals(success);
 
   // test correct internal ordering
   for (int i = 1; i < tree.size; ++i) {
