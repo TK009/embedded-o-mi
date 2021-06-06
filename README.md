@@ -105,6 +105,7 @@ Sorted by about highest to lowest priority:
     - maybe by using proprietary attribute to trigger flash write
 * Value history (maybe with poll subscriptions only)
     - Circular buffers?
+* Callback response retry upon failure
 * Script API: subscription handler scripts to change incoming paths before write or do something completely different with the data
 * Parser named xmlns attributes
     - does not understand them, easiest fix would be to remove any prefixes as there is no overlap with O-MI and O-DF
