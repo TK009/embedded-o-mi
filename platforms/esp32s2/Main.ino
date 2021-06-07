@@ -682,10 +682,10 @@ void writeInternalItems() {
     OmiParser_pushPath(p, "Device", OdfObject);
 
     // Items
-    writeStringItem(p, "SoftwareBuildTime", _BuildInfo.time);
-    writeStringItem(p, "SoftwareBuildDate", _BuildInfo.date);
-    writeStringItem(p, "SoftwareBuildVersion", _BuildInfo.src_version);
-    writeStringItem(p, "SoftwareKernelVersion", _BuildInfo.env_version);
+    writeStringItem(p, "FirmwareBuildTime", _BuildInfo.time);
+    writeStringItem(p, "FirmwareBuildDate", _BuildInfo.date);
+    writeStringItem(p, "FirmwareBuildVersion", _BuildInfo.src_version);
+    writeStringItem(p, "FirmwareCoreVersion", _BuildInfo.env_version);
     writeStringItem(p, "ChipModel", ESP.getChipModel());
     writeStringItem(p, "SdkVersion", ESP.getSdkVersion());
     //TODO: writeStringItem(p, "SoftwareHashMD5", ESP.getSketchMD5().c_str());
@@ -694,8 +694,8 @@ void writeInternalItems() {
     //uint32_t getCpuFreqMHz()
     writeIntItem(p, "ChipRevision", ESP.getChipRevision());
     OmiParser_pushPath(p, "Memory", OdfObject);
-    writeIntItem(p, "SoftwareSize", ESP.getSketchSize());
-    writeIntItem(p, "SoftwareSizeFree", ESP.getFreeSketchSpace());
+    writeIntItem(p, "FirmwareSize", ESP.getSketchSize());
+    writeIntItem(p, "FirmwareSizeFree", ESP.getFreeSketchSpace());
     writeIntItem(p, "HeapTotal", ESP.getHeapSize());
     writeIntItem(p, "PSRAMTotal", ESP.getPsramSize());
     OmiParser_popPath(p); // Memory
