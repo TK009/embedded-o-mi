@@ -13,8 +13,12 @@ BUILD_EXTRA_FLAGS := \
 	-DBOARD_HAS_PSRAM \
   -DTIMEZONE_SECS=7200 -DTIMEZONE_DST_SECS=3600 \
 	-DNTP_SERVER0="fi.pool.ntp.org" \
-	-DServoPin=14 \
-	-DDhtPin=1 \
+	-DNumConnections=2 \
+	-DOPin1=17 \
+	-DHOSTNAME=tk-dippa-ac \
+
+	#-DServoPin=14 \
+	#-DDhtPin=1 \
 
 #-DNTP_SERVER1="1.fi.pool.ntp.org" -DNTP_SERVER2="2.fi.pool.ntp.org" \
 #printPinsStatus()

@@ -74,6 +74,7 @@ Undecided features (should be implemented or not?):
 Sorted by about highest to lowest priority:
 
 * Fix crash bug when subscribing to items that also have scripts (trace; requestHandler.c:43, requestHandler.c:423,502,571 OMIParser.c:336)
+* Fix crash when reading an empty InfoItem (non-existing value)
 * Arduino-ESP: Change/Modify websocket library to allow output message frame streaming 
     - Some tools expect the whole request/response be in one ws message
     - Currently the whole message needs to be passed as one chunk (library limitation)
@@ -97,6 +98,7 @@ Sorted by about highest to lowest priority:
     - workaround: put a onwrite script in the interesting items to copy the walue in a global var
 * Interval subscription request
 * Delete request
+* Do not stop response on the first 404
 * Object(s) level subscriptions that expand when new children are added 
     - currently subscribes only currently existing leaf nodes
 * Flash storage for latest values

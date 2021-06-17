@@ -2,7 +2,7 @@
 
 
 #ifndef OUTPUT_BUF_SIZE
-#define OUTPUT_BUF_SIZE 3500
+#define OUTPUT_BUF_SIZE 6000
 #define ParserSinglePassLength OUTPUT_BUF_SIZE
 #endif
 
@@ -75,6 +75,11 @@
 DHT dht(DhtPin, DHTTYPE);
 #pragma message "DHT11 enabled on pin " XSTR(DhtPin) " "
 #endif
+
+#ifdef OPin1
+#pragma message "Digital Output enabled on pin " XSTR(OPin1) " "
+#endif
+
 
 // TODO: Find AsyncWebServer compatible WiFi manager!?
 const char* ssid = XSTR(WIFI_SSID);
@@ -472,8 +477,6 @@ void setupWiFi() {
     WiFi.setHostname(hostname);
     //wifiMulti.addAP(ssid, password);
     wifiMulti.addAP(ssid, password);
-    //wifiMulti.addAP("***REMOVED***", "***REMOVED***");
-    //wifiMulti.addAP("***REMOVED***", "***REMOVED***");
 
     //WiFi.mode(WIFI_STA);
     //WiFi.begin(ssid, password);
@@ -546,6 +549,16 @@ Path * writeFloatItem(OmiParser * p, const char * strPath, float value, bool noP
     Path * path = p->currentOdfPath;
     path->flags = V_Float;
     path->value.f = value;
+    handleWrite(p, path, OdfParserEvent(PE_ValueData,NULL));
+    if (noPop) return path;
+    OmiParser_popPath(p);
+    return NULL;
+}
+Path * writeBoolItem(OmiParser * p, const char * strPath, bool value, bool noPop=false) {
+    OmiParser_pushPath(p, strPath, OdfInfoItem);
+    Path * path = p->currentOdfPath;
+    path->flags = V_Boolean;
+    path->value.b = value;
     handleWrite(p, path, OdfParserEvent(PE_ValueData,NULL));
     if (noPop) return path;
     OmiParser_popPath(p);
@@ -627,6 +640,32 @@ ErrorResponse handleServo(OmiParser *p, Path *path, OdfParserEvent event) {
     //os_printf("pwm %d / %f \n", pwm, out_max);
     analogWrite(ServoPin, pwm, SERVO_FREQ, SERVO_RESOLUTION);
     servoPowersaveTimer.once(3, servoPowerOff);
+    return Err_OK;
+}
+#endif
+
+
+#ifdef OPin1
+ErrorResponse handleDigitalOutput1(OmiParser *p, Path *path, OdfParserEvent event) {
+    (void) event;
+    if (PathGetNodeType(path) != OdfInfoItem) return Err_OK;
+    AnyValue value = path->value.latest->current.value;
+
+    bool pinState;
+    switch (path->flags & PF_ValueType) {
+      case V_Int:
+      case V_UInt:
+        pinState = value.l != 0; break;
+      case V_Double:
+        pinState = value.d != 0; break;
+      case V_Float:
+        pinState = value.f != 0; break;
+      case V_Boolean:
+        pinState = value.b != 0; break;
+      default:
+        return Err_InvalidAttribute;
+    }
+    digitalWrite(OPin1, pinState? HIGH : LOW);
     return Err_OK;
 }
 #endif
@@ -722,6 +761,17 @@ void writeInternalItems() {
     dht.begin();
     dhtTemp = dht.readTemperature();
     dhtHumi = dht.readHumidity();
+#endif
+
+#ifdef OPin1
+    pinMode(OPin1, OUTPUT);
+    digitalWrite(OPin1, LOW);
+    OmiParser_pushPath(p, "Relay", OdfObject);
+    path = writeBoolItem(p, "State", false, true);
+    addInternalSubscription(p, path, handleDigitalOutput1);
+    // TODO: add items to modify the max and min
+    OmiParser_popPath(p); // InfoItem
+    OmiParser_popPath(p);
 #endif
   }
 
